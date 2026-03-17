@@ -1,0 +1,102 @@
+import 'package:flutter/material.dart';
+
+// TODO: Import your landing page!
+import 'landing_page.dart';
+
+class LogoutWarningScreen extends StatelessWidget {
+  const LogoutWarningScreen({super.key});
+
+  void _proceedToLandingPage(BuildContext context) {
+    // 1. Grab the messenger to show a quick confirmation
+    final messenger = ScaffoldMessenger.of(context);
+
+    // 2. Nuke the stack and drop them on the landing page
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => const LandingPage()),
+      (route) => false,
+    );
+
+    // 3. Show the logout confirmation
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('Logged out successfully.'),
+        backgroundColor: Colors.black87,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text('Create Account', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      ),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const SizedBox(height: 40),
+              // Logout Icon
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.logout_rounded, size: 80, color: Colors.black87),
+              ),
+              const SizedBox(height: 32),
+              
+              const Text(
+                'Log Out to Continue',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.black87),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'To create a new account, you need to log out of your current session. You can easily switch back to this account later.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16, color: Colors.grey, height: 1.5),
+              ),
+              
+              const Spacer(),
+              
+              // Cancel Button
+              OutlinedButton(
+                onPressed: () => Navigator.pop(context),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(56),
+                  side: BorderSide(color: Colors.grey.shade300, width: 2),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('Cancel', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16)),
+              ),
+              const SizedBox(height: 16),
+              
+              // Log Out & Continue Button
+              ElevatedButton(
+                onPressed: () => _proceedToLandingPage(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF333333),
+                  minimumSize: const Size.fromHeight(56),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 0,
+                ),
+                child: const Text('Log Out & Continue', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
