@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/email_link_auth_service.dart'; // Adjust if needed
@@ -66,18 +67,29 @@ class AuthController extends Notifier<AuthState> {
 
   Future<void> _checkSavedSession() async {
     state = AuthLoading();
-    final prefs = await SharedPreferences.getInstance();
-    final savedEmail = prefs.getString('odogo_user_email');
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedEmail = prefs.getString('odogo_user_email');
 
-    if (savedEmail != null) {
-      final userModel = await _userRepo.getUserByEmail(savedEmail);
-      if (userModel != null) {
-        state = AuthAuthenticated(userModel);
+      print(
+        "DEBUG: Checking saved session. Found email: $savedEmail",
+      ); // <--- This will tell us if it saved!
+
+      if (savedEmail != null) {
+        final userModel = await _userRepo.getUserByEmail(savedEmail);
+        if (userModel != null) {
+          state = AuthAuthenticated(userModel);
+        } else {
+          state = AuthNeedsProfileSetup(savedEmail);
+        }
       } else {
-        state = AuthNeedsProfileSetup(savedEmail);
+        state = AuthInitial();
       }
-    } else {
-      state = AuthInitial();
+    } catch (e) {
+      print(
+        "DEBUG: _checkSavedSession failed! Error: $e",
+      ); // <--- Catches Firestore rule errors
+      state = AuthInitial(); // Fallback to login screen safely
     }
   }
 
@@ -117,9 +129,55 @@ class AuthController extends Notifier<AuthState> {
     }
   }
 
+  // Add this new method to AuthController
+  Future<void> completeProfileSetup(UserModel newUser) async {
+    state = AuthLoading();
+    try {
+      // 1. Save the new user to Firestore
+      await _userRepo.createUser(newUser);
+
+      // 2. Officially log them in so the Router takes them to the Map!
+      state = AuthAuthenticated(newUser);
+    } catch (e) {
+      state = AuthError("Failed to save profile: $e");
+    }
+  }
+
   Future<void> logout() async {
+    // 1. Wipe the saved session from the phone's hard drive
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('odogo_user_email');
+
+    // 2. Reset the app state so GoRouter kicks the user to /login
     state = AuthInitial();
+  }
+
+  Future<void> deleteAccount(String email, String otp) async {
+    state = AuthLoading();
+    try {
+      // 1. Verify the OTP
+      final verified = EmailOtpAuthService.instance.verifyOtp(
+        email: email,
+        otp: otp,
+      );
+      if (!verified) {
+        state = AuthError("Invalid or expired OTP. Please try again.");
+        return;
+      }
+
+      // 2. Delete the user document from Firestore
+      // (If you have a _userRepo.deleteUser(email) method, use that instead)
+      await FirebaseFirestore.instance.collection('users').doc(email).delete();
+
+      // 3. Wipe the session from the phone's hard drive
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('odogo_user_email');
+
+      // 4. Reset the state to Initial.
+      // GoRouter will instantly see this and teleport the user to the Landing Page!
+      state = AuthInitial();
+    } catch (e) {
+      state = AuthError("Failed to delete account: $e");
+    }
   }
 }

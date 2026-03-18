@@ -1,56 +1,109 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'landing_page.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Needed to wipe the database
+import '../controllers/auth_controller.dart';
+import '../services/email_link_auth_service.dart';
 
-class AccountDeletionOtpScreen extends StatefulWidget {
+class AccountDeletionOtpScreen extends ConsumerStatefulWidget {
   final String contactInfo;
 
   const AccountDeletionOtpScreen({super.key, required this.contactInfo});
 
   @override
-  State<AccountDeletionOtpScreen> createState() => _AccountDeletionOtpScreenState();
+  ConsumerState<AccountDeletionOtpScreen> createState() =>
+      _AccountDeletionOtpScreenState();
 }
 
-class _AccountDeletionOtpScreenState extends State<AccountDeletionOtpScreen> {
+class _AccountDeletionOtpScreenState
+    extends ConsumerState<AccountDeletionOtpScreen> {
   final List<FocusNode> _focusNodes = List.generate(4, (index) => FocusNode());
-  final List<TextEditingController> _controllers = List.generate(4, (index) => TextEditingController());
+  final List<TextEditingController> _controllers = List.generate(
+    4,
+    (index) => TextEditingController(),
+  );
+  bool _isLoading = false;
 
   @override
   void dispose() {
-    for (var node in _focusNodes) { node.dispose(); }
-    for (var controller in _controllers) { controller.dispose(); }
+    for (var node in _focusNodes) {
+      node.dispose();
+    }
+    for (var controller in _controllers) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
-  void _verifyAndDelete() {
+  Future<void> _verifyAndDelete() async {
     String otp = _controllers.map((c) => c.text).join();
-    
-    if (otp.length == 4) {
-      FocusScope.of(context).unfocus(); 
 
-      // 1. Grab messenger before wiping the navigation stack
-      final messenger = ScaffoldMessenger.of(context);
+    if (otp.length != 4) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter the full 4-digit code.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
-      // 2. NUKE THE STACK AND PUSH THE LANDING PAGE
-      // This ensures they are completely logged out and cannot hit the "back" button
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const LandingPage()), // <-- Routes directly to your LandingPage class!
-        (route) => false,
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // 1. STEALTH MODE: Verify OTP quietly
+      final verified = EmailOtpAuthService.instance.verifyOtp(
+        email: widget.contactInfo,
+        otp: otp,
       );
 
-      // 3. Show the final confirmation
-      messenger.showSnackBar(
+      if (!verified) {
+        if (!mounted) return;
+        setState(() {
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Invalid or expired OTP.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      // 2. Erase the user from Firebase
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.contactInfo)
+          .delete();
+
+      if (!mounted) return;
+
+      // 3. Show success message BEFORE wiping the state
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Account permanently deleted.'),
-          backgroundColor: Colors.red, // Keeps the red warning theme for the popup
+          backgroundColor: Colors.red,
           duration: Duration(seconds: 4),
         ),
       );
-      
-    } else {
+
+      // 4. Pull the plug.
+      // This wipes the hard drive and triggers GoRouter to cleanly slide you back to the Landing Page.
+      ref.read(authControllerProvider.notifier).logout();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter the full 4-digit code.'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text('Failed to delete account: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
@@ -58,7 +111,7 @@ class _AccountDeletionOtpScreenState extends State<AccountDeletionOtpScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF221610), // Matched to your dark theme
+      backgroundColor: const Color(0xFF221610),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -66,7 +119,10 @@ class _AccountDeletionOtpScreenState extends State<AccountDeletionOtpScreen> {
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text('Final Verification', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Final Verification',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
       ),
       body: SafeArea(
         child: Padding(
@@ -75,38 +131,63 @@ class _AccountDeletionOtpScreenState extends State<AccountDeletionOtpScreen> {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               const SizedBox(height: 20),
-              const Icon(Icons.security, size: 64, color: Color(0xFF2ECC71)), // Matched green
+              const Icon(Icons.security, size: 64, color: Color(0xFF2ECC71)),
               const SizedBox(height: 24),
               const Text(
                 'Verify Deletion',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
               ),
               const SizedBox(height: 16),
               Text(
                 'Enter the 4-digit code sent to:\n${widget.contactInfo}',
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 16, color: Colors.redAccent, height: 1.5, fontWeight: FontWeight.w500),
+                style: const TextStyle(
+                  fontSize: 16,
+                  color: Colors.redAccent,
+                  height: 1.5,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
               const SizedBox(height: 40),
 
-              // The 4-Digit OTP Input Row
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: List.generate(4, (index) => _buildOtpBox(index)),
               ),
-              
+
               const SizedBox(height: 40),
 
-              // Final Destructive Button
               ElevatedButton(
-                onPressed: _verifyAndDelete,
+                onPressed: _isLoading ? null : _verifyAndDelete,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2ECC71), // Matched your green button
+                  backgroundColor: const Color(0xFF2ECC71),
                   minimumSize: const Size.fromHeight(56),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   elevation: 0,
                 ),
-                child: const Text('CONFIRM DELETION', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                child: _isLoading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Text(
+                        'CONFIRM DELETION',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
               ),
             ],
           ),
@@ -117,11 +198,12 @@ class _AccountDeletionOtpScreenState extends State<AccountDeletionOtpScreen> {
 
   Widget _buildOtpBox(int index) {
     return Container(
-      width: 65, height: 75,
+      width: 65,
+      height: 75,
       decoration: BoxDecoration(
-        color: Colors.red.withOpacity(0.1), // Dark red tint
-        borderRadius: BorderRadius.circular(16), 
-        border: Border.all(color: Colors.red.withOpacity(0.5), width: 2)
+        color: Colors.red.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.red.withOpacity(0.5), width: 2),
       ),
       child: Center(
         child: TextField(
@@ -129,15 +211,22 @@ class _AccountDeletionOtpScreenState extends State<AccountDeletionOtpScreen> {
           focusNode: _focusNodes[index],
           textAlign: TextAlign.center,
           keyboardType: TextInputType.number,
-          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white), // White text for dark mode
+          style: const TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
           inputFormatters: [LengthLimitingTextInputFormatter(1)],
-          decoration: const InputDecoration(border: InputBorder.none, counterText: ''),
+          decoration: const InputDecoration(
+            border: InputBorder.none,
+            counterText: '',
+          ),
           onChanged: (value) {
             if (value.isNotEmpty) {
               if (index < 3) {
                 FocusScope.of(context).requestFocus(_focusNodes[index + 1]);
               } else {
-                FocusScope.of(context).unfocus(); 
+                FocusScope.of(context).unfocus();
               }
             } else if (value.isEmpty && index > 0) {
               FocusScope.of(context).requestFocus(_focusNodes[index - 1]);

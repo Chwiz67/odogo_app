@@ -1,44 +1,87 @@
 import 'package:flutter/material.dart';
-import 'account_deletion_otp_screen.dart'; // <-- ADDED THE OTP IMPORT
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../controllers/auth_controller.dart';
+import '../services/email_link_auth_service.dart'; // Needed for stealth OTP
+import 'account_deletion_otp_screen.dart';
 
-class AccountDeletionScreen extends StatelessWidget {
+class AccountDeletionScreen extends ConsumerStatefulWidget {
   const AccountDeletionScreen({super.key});
 
-  // --- NEW OTP ROUTING LOGIC ---
-  void _requestDeletionOtp(BuildContext context) {
-    // In a real app, you would fetch their registered phone/email from your backend here
-    const String userPhone = "+91 98765 43210"; 
+  @override
+  ConsumerState<AccountDeletionScreen> createState() =>
+      _AccountDeletionScreenState();
+}
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const AccountDeletionOtpScreen(contactInfo: userPhone),
-      ),
-    );
+class _AccountDeletionScreenState extends ConsumerState<AccountDeletionScreen> {
+  bool _isLoading = false;
+
+  Future<void> _requestDeletionOtp() async {
+    // 1. Get the current authenticated email
+    final authState = ref.read(authControllerProvider);
+    if (authState is! AuthAuthenticated) return;
+
+    final userEmail = authState.user.emailID;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // 2. STEALTH MODE: Use the raw service to send the OTP.
+      // This prevents GoRouter from panicking and destroying the screen!
+      await EmailOtpAuthService.instance.sendOtp(email: userEmail);
+
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
+
+      // 3. Move to OTP screen
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) =>
+              AccountDeletionOtpScreen(contactInfo: userEmail),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to send OTP: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF221610), // Your deep dark background
+      backgroundColor: const Color(0xFF221610),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        // The essential Back Button
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text('Inesh', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Settings',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
         actions: const [
           Padding(
             padding: EdgeInsets.only(right: 16.0),
             child: CircleAvatar(
               radius: 16,
-              backgroundColor: Color(0xFF2ECC71), // Matched to your new green
+              backgroundColor: Color(0xFF2ECC71),
               child: Icon(Icons.person, color: Colors.white, size: 20),
             ),
-          )
+          ),
         ],
       ),
       body: SafeArea(
@@ -47,7 +90,11 @@ class AccountDeletionScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.delete_forever, size: 80, color: Color(0xFF2ECC71)), // New bright green
+              const Icon(
+                Icons.delete_forever,
+                size: 80,
+                color: Color(0xFF2ECC71),
+              ),
               const SizedBox(height: 24),
               const Text(
                 'Delete Account',
@@ -78,14 +125,30 @@ class AccountDeletionScreen extends StatelessWidget {
               const SizedBox(height: 40),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2ECC71), // New bright green
+                  backgroundColor: const Color(0xFF2ECC71),
                   minimumSize: const Size(double.infinity, 56),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                onPressed: () => _requestDeletionOtp(context), // <-- NOW ROUTES TO THE SECURE OTP SCREEN!
-                child: const Text('YES, DELETE ACCOUNT', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                onPressed: _isLoading ? null : _requestDeletionOtp,
+                child: _isLoading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Text(
+                        'YES, DELETE ACCOUNT',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
               ),
               const SizedBox(height: 16),
               OutlinedButton(
@@ -96,8 +159,15 @@ class AccountDeletionScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
-                onPressed: () => Navigator.pop(context), // Safely closes the popup
-                child: const Text('NO, CANCEL', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                onPressed: () => Navigator.pop(context),
+                child: const Text(
+                  'NO, CANCEL',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
               ),
             ],
           ),

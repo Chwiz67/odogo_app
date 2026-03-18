@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
-// 1. Update this import to match your landing page file path
-import 'landing_page.dart'; 
+import 'package:flutter_riverpod/flutter_riverpod.dart'; // 1. Added Riverpod
+import '../controllers/auth_controller.dart'; // 2. Import your AuthController (adjust path if needed)
 
-class SignOutScreen extends StatelessWidget {
+// 3. Changed from StatelessWidget to ConsumerWidget
+class SignOutScreen extends ConsumerWidget {
   const SignOutScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  // 4. Added WidgetRef ref to the build method
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -16,7 +18,10 @@ class SignOutScreen extends StatelessWidget {
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text('Inesh', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Inesh',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
         actions: const [
           Padding(
             padding: EdgeInsets.only(right: 16.0),
@@ -25,7 +30,7 @@ class SignOutScreen extends StatelessWidget {
               backgroundColor: Color(0xFF66D2A3),
               child: Icon(Icons.person, color: Colors.white, size: 20),
             ),
-          )
+          ),
         ],
       ),
       body: Center(
@@ -37,20 +42,49 @@ class SignOutScreen extends StatelessWidget {
               const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text('Sign Out', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.black)),
+                  Text(
+                    'Sign Out',
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black,
+                    ),
+                  ),
                   SizedBox(width: 8),
                   Icon(Icons.power_settings_new, size: 36, color: Colors.black),
                 ],
               ),
               const SizedBox(height: 16),
-              const Text('Are you Sure?', style: TextStyle(color: Colors.red, fontSize: 20, fontWeight: FontWeight.bold)),
+              const Text(
+                'Are you Sure?',
+                style: TextStyle(
+                  color: Colors.red,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               const SizedBox(height: 48),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Expanded(child: _buildButton(context, 'NO', color: const Color(0xFF1E293B))),
+                  // 5. Passed 'ref' into the helper method
+                  Expanded(
+                    child: _buildButton(
+                      context,
+                      ref,
+                      'NO',
+                      color: const Color(0xFF1E293B),
+                    ),
+                  ),
                   const SizedBox(width: 20),
-                  Expanded(child: _buildButton(context, 'YES', color: const Color(0xFF22C55E))),
+                  Expanded(
+                    child: _buildButton(
+                      context,
+                      ref,
+                      'YES',
+                      color: const Color(0xFF22C55E),
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -60,7 +94,13 @@ class SignOutScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildButton(BuildContext context, String text, {required Color color}) {
+  // 6. Updated helper method to accept WidgetRef
+  Widget _buildButton(
+    BuildContext context,
+    WidgetRef ref,
+    String text, {
+    required Color color,
+  }) {
     return ElevatedButton(
       style: ElevatedButton.styleFrom(
         backgroundColor: color,
@@ -70,17 +110,21 @@ class SignOutScreen extends StatelessWidget {
       ),
       onPressed: () {
         if (text == 'YES') {
-          // 2. Clear the entire stack and go to Landing Page
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (context) => const LandingPage()),
-            (route) => false, // This condition removes all previous routes
-          );
+          // 7. THE FIX: Tell the Controller to wipe the hard drive.
+          // GoRouter will automatically see the state change and instantly teleport the user to the Landing Page!
+          ref.read(authControllerProvider.notifier).logout();
         } else {
           Navigator.pop(context);
         }
       },
-      child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
     );
   }
 }

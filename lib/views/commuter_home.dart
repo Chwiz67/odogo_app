@@ -22,8 +22,8 @@ class _CommuterHomeScreenState extends State<CommuterHomeScreen> {
 
   final List<Widget> _pages = [
     const _MapHomeView(),
-    const BookingsScreen(), 
-    const ProfileScreen(), 
+    const BookingsScreen(),
+    const ProfileScreen(),
   ];
 
   void _onItemTapped(int index) {
@@ -37,8 +37,8 @@ class _CommuterHomeScreenState extends State<CommuterHomeScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       // This body dynamically changes based on the tab you click
-      body: _pages[_selectedIndex], 
-      
+      body: _pages[_selectedIndex],
+
       // SECTION: Bottom Navigation Bar
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
@@ -46,9 +46,18 @@ class _CommuterHomeScreenState extends State<CommuterHomeScreen> {
         selectedItemColor: Colors.black,
         unselectedItemColor: Colors.grey,
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.confirmation_number_rounded), label: 'Bookings'),
-          BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'Profile'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home_rounded),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.confirmation_number_rounded),
+            label: 'Bookings',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_rounded),
+            label: 'Profile',
+          ),
         ],
       ),
     );
@@ -76,7 +85,9 @@ class _MapHomeViewState extends State<_MapHomeView> {
   StreamSubscription<Position>? _locationSubscription;
   final GlobalKey _bottomOverlayKey = GlobalKey();
   double _bottomOverlayHeight = 0;
-  List<DropoffLocation> _filteredLocations = iitkDropoffLocations.take(8).toList();
+  List<DropoffLocation> _filteredLocations = iitkDropoffLocations
+      .take(8)
+      .toList();
 
   double get _verticalCenterOffsetPx {
     return (_bottomOverlayHeight + _bottomOverlayInset) / 2;
@@ -122,14 +133,13 @@ class _MapHomeViewState extends State<_MapHomeView> {
       distanceFilter: 3,
     );
 
-    _locationSubscription = Geolocator.getPositionStream(
-      locationSettings: locationSettings,
-    ).listen(
-      (position) {
-        _applyLocationUpdate(LatLng(position.latitude, position.longitude));
-      },
-      onError: (_) {},
-    );
+    _locationSubscription =
+        Geolocator.getPositionStream(locationSettings: locationSettings).listen(
+          (position) {
+            _applyLocationUpdate(LatLng(position.latitude, position.longitude));
+          },
+          onError: (_) {},
+        );
   }
 
   void _applyLocationUpdate(LatLng location) {
@@ -138,7 +148,8 @@ class _MapHomeViewState extends State<_MapHomeView> {
       _currentLocation = location;
     });
 
-    final shouldRecenter = _lastRecenterLocation == null ||
+    final shouldRecenter =
+        _lastRecenterLocation == null ||
         Geolocator.distanceBetween(
               _lastRecenterLocation!.latitude,
               _lastRecenterLocation!.longitude,
@@ -169,13 +180,10 @@ class _MapHomeViewState extends State<_MapHomeView> {
       return;
     }
 
-    FocusScope.of(context).unfocus(); 
+    FocusScope.of(context).unfocus();
 
     final matchedDropoff = _resolveDropoffLocation(normalized);
-    _openTripConfirmation(
-      destinationName: normalized,
-      dropoff: matchedDropoff,
-    );
+    _openTripConfirmation(destinationName: normalized, dropoff: matchedDropoff);
   }
 
   void _openTripConfirmation({
@@ -272,10 +280,7 @@ class _MapHomeViewState extends State<_MapHomeView> {
     setState(() {
       _searchController.text = location.name;
     });
-    _openTripConfirmation(
-      destinationName: location.name,
-      dropoff: location,
-    );
+    _openTripConfirmation(destinationName: location.name, dropoff: location);
   }
 
   @override
@@ -307,10 +312,26 @@ class _MapHomeViewState extends State<_MapHomeView> {
               tileBuilder: (context, tileWidget, tile) {
                 return ColorFiltered(
                   colorFilter: const ColorFilter.matrix([
-                    -0.2126, -0.7152, -0.0722, 0, 255,
-                    -0.2126, -0.7152, -0.0722, 0, 255,
-                    -0.2126, -0.7152, -0.0722, 0, 255,
-                    0,       0,       0,       1, 0,
+                    -0.2126,
+                    -0.7152,
+                    -0.0722,
+                    0,
+                    255,
+                    -0.2126,
+                    -0.7152,
+                    -0.0722,
+                    0,
+                    255,
+                    -0.2126,
+                    -0.7152,
+                    -0.0722,
+                    0,
+                    255,
+                    0,
+                    0,
+                    0,
+                    1,
+                    0,
                   ]),
                   child: tileWidget,
                 );
@@ -329,7 +350,11 @@ class _MapHomeViewState extends State<_MapHomeView> {
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.white, width: 2),
                       ),
-                      child: const Icon(Icons.my_location, color: Colors.black, size: 18),
+                      child: const Icon(
+                        Icons.my_location,
+                        color: Colors.black,
+                        size: 18,
+                      ),
                     ),
                   ),
                 ],
@@ -345,23 +370,41 @@ class _MapHomeViewState extends State<_MapHomeView> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Image.asset(
-                  'assets/images/odogo_logo_black_bg.jpeg', 
+                  'assets/images/odogo_logo_black_bg.jpeg',
                   height: 50,
-                  errorBuilder: (context, error, stackTrace) => const Icon(Icons.local_taxi, color: Colors.greenAccent, size: 40),
+                  errorBuilder: (context, error, stackTrace) => const Icon(
+                    Icons.local_taxi,
+                    color: Colors.greenAccent,
+                    size: 40,
+                  ),
                 ),
                 ElevatedButton.icon(
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => const ScheduleBookingScreen()),
+                      MaterialPageRoute(
+                        builder: (context) => const ScheduleBookingScreen(),
+                      ),
                     );
                   },
                   icon: const Icon(Icons.calendar_month, color: Colors.black),
-                  label: const Text('Schedule\nbookings', style: TextStyle(color: Colors.black, fontSize: 12, fontWeight: FontWeight.bold)),
+                  label: const Text(
+                    'Schedule\nbookings',
+                    style: TextStyle(
+                      color: Colors.black,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF66D2A3),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                   ),
                 ),
               ],
@@ -391,9 +434,19 @@ class _MapHomeViewState extends State<_MapHomeView> {
                   onSubmitted: _handleSearch,
                   decoration: InputDecoration(
                     hintText: 'Where to?',
-                    hintStyle: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: Colors.black),
-                    prefixIcon: const Icon(Icons.search, color: Colors.black, size: 30),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
+                    hintStyle: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black,
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.search,
+                      color: Colors.black,
+                      size: 30,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
                     contentPadding: const EdgeInsets.symmetric(vertical: 15),
                   ),
                 ),
@@ -403,7 +456,10 @@ class _MapHomeViewState extends State<_MapHomeView> {
                     padding: EdgeInsets.symmetric(vertical: 12),
                     child: Text(
                       'No matching campus location.',
-                      style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   )
                 else
@@ -430,7 +486,11 @@ class _MapHomeViewState extends State<_MapHomeView> {
     );
   }
 
-  Widget _buildHistoryItem(IconData icon, String title, {required VoidCallback onTap}) {
+  Widget _buildHistoryItem(
+    IconData icon,
+    String title, {
+    required VoidCallback onTap,
+  }) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(25),
@@ -445,7 +505,14 @@ class _MapHomeViewState extends State<_MapHomeView> {
           children: [
             Icon(icon, color: Colors.grey[700]),
             const SizedBox(width: 15),
-            Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black54)),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.black54,
+              ),
+            ),
           ],
         ),
       ),

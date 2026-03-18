@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'sign_in_page.dart';
+import 'package:go_router/go_router.dart';
 
 class LandingPage extends StatefulWidget {
   const LandingPage({super.key});
@@ -23,7 +23,7 @@ class _LandingPageState extends State<LandingPage> {
             children: [
               // Placeholder for the OdoGo Auto Rickshaw Logo
               Image.asset(
-                'assets/images/odogo_logo.png', 
+                'assets/images/odogo_logo.png',
                 height: 100, // Adjust size as needed
               ),
               const SizedBox(height: 10),
@@ -35,7 +35,7 @@ class _LandingPageState extends State<LandingPage> {
                   color: Colors.black,
                 ),
               ),
-              
+
               // THE NEW DYNAMIC SUBTITLE
               Text(
                 isDriverView ? 'DRIVER' : 'COMMUTER',
@@ -46,20 +46,17 @@ class _LandingPageState extends State<LandingPage> {
                   letterSpacing: 2.0,
                 ),
               ),
-              
+
               const SizedBox(height: 50),
-              
+
               // Sign In Button
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 40),
                 child: ElevatedButton(
                   onPressed: () {
-                    // Navigate to SignInPage and pass the current toggle state
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => SignInPage(isDriver: isDriverView, isSignUp: false),
-                      ),
+                    context.push(
+                      '/sign-in',
+                      extra: {'isDriver': isDriverView, 'isSignUp': false},
                     );
                   },
                   style: ElevatedButton.styleFrom(
@@ -80,12 +77,9 @@ class _LandingPageState extends State<LandingPage> {
                 padding: const EdgeInsets.symmetric(horizontal: 40),
                 child: ElevatedButton(
                   onPressed: () {
-                    // Navigate to SignUpPage and pass the current toggle state
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => SignInPage(isDriver: isDriverView, isSignUp: true),
-                      ),
+                    context.push(
+                      '/sign-in',
+                      extra: {'isDriver': isDriverView, 'isSignUp': true},
                     );
                   },
                   style: ElevatedButton.styleFrom(
@@ -110,10 +104,7 @@ class _LandingPageState extends State<LandingPage> {
                 },
                 child: Text(
                   isDriverView ? 'Want to be a user?' : 'Want to be a driver?',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    color: Colors.black54,
-                  ),
+                  style: const TextStyle(fontSize: 16, color: Colors.black54),
                 ),
               ),
             ],

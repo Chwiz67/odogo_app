@@ -1,22 +1,27 @@
 import 'package:flutter/material.dart';
-import 'commuter_home.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Needed for Timestamp!
+import '../controllers/auth_controller.dart';
+import '../models/user_model.dart';
+import '../models/enums.dart';
 import 'driver_document_upload_screen.dart';
 
-class SignUpPage extends StatefulWidget {
+class SignUpPage extends ConsumerStatefulWidget {
   final bool isDriver;
 
   const SignUpPage({super.key, required this.isDriver});
 
   @override
-  State<SignUpPage> createState() => _SignUpPageState();
+  ConsumerState<SignUpPage> createState() => _SignUpPageState();
 }
 
-class _SignUpPageState extends State<SignUpPage> {
+class _SignUpPageState extends ConsumerState<SignUpPage> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
-  
+
   String? _selectedGender;
   DateTime? _selectedDate;
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -25,25 +30,21 @@ class _SignUpPageState extends State<SignUpPage> {
     super.dispose();
   }
 
-  // Helper for error messages
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: Colors.red),
     );
   }
 
-  // The validation gauntlet
-  void _handleContinue() {
+  void _handleContinue() async {
     final name = _nameController.text.trim();
     final phone = _phoneController.text.trim();
 
-    // 1. Name Check (Now with character validation)
     if (name.isEmpty) {
       _showError('Please enter your full name.');
       return;
     }
-    
-    // REGEX: Only allows uppercase, lowercase, and spaces
+
     final nameRegex = RegExp(r"^[a-zA-Z\s]+$");
     if (!nameRegex.hasMatch(name)) {
       _showError('Name can only contain letters and spaces.');
@@ -55,7 +56,6 @@ class _SignUpPageState extends State<SignUpPage> {
       return;
     }
 
-    // 2. Phone Number Check
     if (phone.isEmpty) {
       _showError('Please enter your phone number.');
       return;
@@ -65,25 +65,65 @@ class _SignUpPageState extends State<SignUpPage> {
       return;
     }
 
-    // 3. Gender Check
     if (_selectedGender == null) {
       _showError('Please select your gender.');
       return;
     }
 
-    // 4. DOB Check
     if (_selectedDate == null) {
       _showError('Please select your date of birth.');
       return;
     }
 
-    // --- SUCCESS: ROUTING LOGIC ---
-    if (widget.isDriver) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => const DriverDocumentUploadScreen()),
-      );
+    setState(() {
+      _isLoading = true;
+    });
+
+    // 1. Grab the email from the current Auth State
+    final authState = ref.read(authControllerProvider);
+    if (authState is! AuthNeedsProfileSetup) {
+      _showError("Authentication state error. Please try logging in again.");
+      setState(() {
+        _isLoading = false;
+      });
+      return;
+    }
+
+    final userEmail = authState.email;
+
+    // 2. Construct your exact UserModel
+    final newUser = UserModel(
+      userID: userEmail, // Using email as the unique ID
+      emailID: userEmail,
+      phoneNo: phone,
+      gender: _selectedGender!,
+      // Convert Flutter DateTime to Firebase Timestamp
+      dob: Timestamp.fromDate(_selectedDate!),
+      role: widget.isDriver ? UserRole.driver : UserRole.commuter,
+
+      // If it's a driver, default them to unverified initially
+      verificationStatus: widget.isDriver ? false : null,
+
+      // Note: You gathered 'name' from the UI, but it's not in UserModel yet!
+      // Add `name: name,` here once you update your UserModel.
+    );
+
+    // 3. Save to Firebase and update Riverpod State!
+    await ref
+        .read(authControllerProvider.notifier)
+        .completeProfileSetup(newUser);
+
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+    });
+
+    // 4. Check if it worked
+    final newState = ref.read(authControllerProvider);
+    if (newState is AuthError) {
+      _showError(newState.message);
     } else {
+      // SUCCESS!
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Registration successful! Welcome to OdoGo.'),
@@ -91,11 +131,20 @@ class _SignUpPageState extends State<SignUpPage> {
         ),
       );
 
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const CommuterHomeScreen()),
-        (route) => false,
-      );
+      // --- DRIVER ROUTING EDGE CASE ---
+      // If they are a driver, GoRouter is going to instantly teleport them to '/driver-home'
+      // because the state is now AuthAuthenticated.
+      // If you want them to upload docs FIRST, you should push them to that screen here,
+      // OR better yet, let them go to the driver home screen and pop up a "Please upload docs"
+      // modal based on their `verificationStatus == false`.
+      if (widget.isDriver) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const DriverDocumentUploadScreen(),
+          ),
+        );
+      }
     }
   }
 
@@ -109,7 +158,7 @@ class _SignUpPageState extends State<SignUpPage> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.light(
-              primary: Color(0xFF66D2A3), // Using OdoGo Green for the calendar
+              primary: Color(0xFF66D2A3),
               onPrimary: Colors.black,
               onSurface: Colors.black,
             ),
@@ -132,7 +181,8 @@ class _SignUpPageState extends State<SignUpPage> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
+          // Logs out and kicks them to the login screen
+          onPressed: () => ref.read(authControllerProvider.notifier).logout(),
         ),
       ),
       body: SafeArea(
@@ -141,16 +191,23 @@ class _SignUpPageState extends State<SignUpPage> {
           child: Column(
             children: [
               const SizedBox(height: 20),
-              // Official Logo
               ClipRRect(
                 borderRadius: BorderRadius.circular(16),
-                child: Image.asset('assets/images/odogo_logo_black_bg.jpeg', height: 80),
+                child: Image.asset(
+                  'assets/images/odogo_logo_black_bg.jpeg',
+                  height: 80,
+                ),
               ),
               const SizedBox(height: 10),
-              const Text('OdoGo', style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold)),
+              const Text(
+                'OdoGo',
+                style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 5),
               Text(
-                widget.isDriver ? 'Driver Registration' : 'Commuter Registration',
+                widget.isDriver
+                    ? 'Driver Registration'
+                    : 'Commuter Registration',
                 style: const TextStyle(fontSize: 16, color: Colors.grey),
               ),
               const SizedBox(height: 40),
@@ -160,8 +217,13 @@ class _SignUpPageState extends State<SignUpPage> {
                 textCapitalization: TextCapitalization.words,
                 decoration: InputDecoration(
                   hintText: 'Enter Full Name',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    vertical: 15,
+                    horizontal: 20,
+                  ),
                 ),
               ),
               const SizedBox(height: 15),
@@ -173,8 +235,13 @@ class _SignUpPageState extends State<SignUpPage> {
                 decoration: InputDecoration(
                   hintText: 'Enter Phone Number',
                   counterText: "",
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    vertical: 15,
+                    horizontal: 20,
+                  ),
                 ),
               ),
               const SizedBox(height: 15),
@@ -182,12 +249,20 @@ class _SignUpPageState extends State<SignUpPage> {
               DropdownButtonFormField<String>(
                 decoration: InputDecoration(
                   hintText: 'Gender',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    vertical: 15,
+                    horizontal: 20,
+                  ),
                 ),
                 initialValue: _selectedGender,
                 items: ['Male', 'Female', 'Other', 'Prefer not to say']
-                    .map((label) => DropdownMenuItem(value: label, child: Text(label)))
+                    .map(
+                      (label) =>
+                          DropdownMenuItem(value: label, child: Text(label)),
+                    )
                     .toList(),
                 onChanged: (value) => setState(() => _selectedGender = value),
               ),
@@ -196,7 +271,10 @@ class _SignUpPageState extends State<SignUpPage> {
               GestureDetector(
                 onTap: () => _selectDate(context),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 15,
+                    horizontal: 20,
+                  ),
                   decoration: BoxDecoration(
                     border: Border.all(color: Colors.grey),
                     borderRadius: BorderRadius.circular(10),
@@ -210,7 +288,9 @@ class _SignUpPageState extends State<SignUpPage> {
                             : '${_selectedDate!.day}/${_selectedDate!.month}/${_selectedDate!.year}',
                         style: TextStyle(
                           fontSize: 16,
-                          color: _selectedDate == null ? Colors.black54 : Colors.black87,
+                          color: _selectedDate == null
+                              ? Colors.black54
+                              : Colors.black87,
                         ),
                       ),
                       const Icon(Icons.calendar_month, color: Colors.black54),
@@ -221,14 +301,28 @@ class _SignUpPageState extends State<SignUpPage> {
               const SizedBox(height: 30),
 
               ElevatedButton(
-                onPressed: _handleContinue,
+                onPressed: _isLoading ? null : _handleContinue,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.grey[300],
                   foregroundColor: Colors.black,
                   minimumSize: const Size(double.infinity, 50),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
-                child: const Text('Continue', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                child: _isLoading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text(
+                        'Continue',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
               ),
               const SizedBox(height: 40),
             ],
