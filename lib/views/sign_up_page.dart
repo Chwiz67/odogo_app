@@ -4,7 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart'; // Needed for Timestamp!
 import '../controllers/auth_controller.dart';
 import '../models/user_model.dart';
 import '../models/enums.dart';
-import 'driver_document_upload_screen.dart';
 
 class SignUpPage extends ConsumerStatefulWidget {
   final bool isDriver;
@@ -135,14 +134,14 @@ class _SignUpPageState extends ConsumerState<SignUpPage> {
       // If you want them to upload docs FIRST, you should push them to that screen here,
       // OR better yet, let them go to the driver home screen and pop up a "Please upload docs"
       // modal based on their `verificationStatus == false`.
-      if (widget.isDriver) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const DriverDocumentUploadScreen(),
-          ),
-        );
-      }
+      // if (widget.isDriver) {
+      //   Navigator.push(
+      //     context,
+      //     MaterialPageRoute(
+      //       builder: (context) => const DriverDocumentUploadScreen(),
+      //     ),
+      //   );
+      // }
     }
   }
 

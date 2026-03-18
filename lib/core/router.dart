@@ -121,6 +121,7 @@ import '../views/otp_page.dart';
 import '../views/sign_up_page.dart';
 import '../views/commuter_home.dart';
 import '../views/driver_home_screen.dart';
+import '../views/driver_document_upload_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final routerNotifier = ValueNotifier<AuthState>(
@@ -139,39 +140,84 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: '/splash',
     refreshListenable: routerNotifier,
 
+    // redirect: (context, state) {
+    //   final authState = ref.read(authControllerProvider);
+    //   final path = state.uri.path;
+
+    //   // 1. If loading, ALWAYS force the splash screen (unless already there)
+    //   if (authState is AuthLoading) {
+    //     return path == '/splash' ? null : '/splash';
+    //   }
+
+    //   // 2. These are the ONLY screens an unauthenticated user is allowed to see
+    //   // Notice: /splash is NO LONGER in this list!
+    //   final isUnauthRoute =
+    //       path == '/login' || path == '/sign-in' || path == '/otp';
+
+    //   // 3. Handle Unauthenticated users (Fresh app or Logged out)
+    //   if (authState is AuthInitial ||
+    //       authState is AuthError ||
+    //       authState is AuthOtpSent) {
+    //     // If they are on the splash screen (or anywhere else), kick them to login
+    //     return isUnauthRoute ? null : '/login';
+    //   }
+
+    //   // 4. Handle Authenticated users
+    //   if (authState is AuthAuthenticated) {
+    //     // If they are on an unauth screen, splash screen, or setup, send them Home
+    //     if (isUnauthRoute || path == '/splash' || path == '/setup') {
+    //       return authState.user.role == UserRole.driver
+    //           ? '/driver-home'
+    //           : '/commuter-home';
+    //     }
+    //   }
+
+    //   // 5. Handle users who need to finish registration
+    //   if (authState is AuthNeedsProfileSetup) {
+    //     return path == '/setup' ? null : '/setup';
+    //   }
+
+    //   return null;
+    // },
     redirect: (context, state) {
       final authState = ref.read(authControllerProvider);
       final path = state.uri.path;
 
-      // 1. If loading, ALWAYS force the splash screen (unless already there)
       if (authState is AuthLoading) {
         return path == '/splash' ? null : '/splash';
       }
 
-      // 2. These are the ONLY screens an unauthenticated user is allowed to see
-      // Notice: /splash is NO LONGER in this list!
       final isUnauthRoute =
           path == '/login' || path == '/sign-in' || path == '/otp';
 
-      // 3. Handle Unauthenticated users (Fresh app or Logged out)
       if (authState is AuthInitial ||
           authState is AuthError ||
           authState is AuthOtpSent) {
-        // If they are on the splash screen (or anywhere else), kick them to login
         return isUnauthRoute ? null : '/login';
       }
 
-      // 4. Handle Authenticated users
+      // --- THE UPDATED AUTHENTICATED LOGIC ---
       if (authState is AuthAuthenticated) {
-        // If they are on an unauth screen, splash screen, or setup, send them Home
-        if (isUnauthRoute || path == '/splash' || path == '/setup') {
-          return authState.user.role == UserRole.driver
-              ? '/driver-home'
-              : '/commuter-home';
+        final user = authState.user;
+        final isDriver = user.role == UserRole.driver;
+
+        // Check if a driver still needs to upload documents (e.g., vehicle data is null)
+        final needsDocs = isDriver && user.vehicle == null;
+
+        if (needsDocs) {
+          // Trap them on the docs screen until they submit
+          return path == '/driver-docs' ? null : '/driver-docs';
+        }
+
+        // If they don't need docs, route them home seamlessly
+        if (isUnauthRoute ||
+            path == '/splash' ||
+            path == '/setup' ||
+            path == '/driver-docs') {
+          return isDriver ? '/driver-home' : '/commuter-home';
         }
       }
 
-      // 5. Handle users who need to finish registration
       if (authState is AuthNeedsProfileSetup) {
         return path == '/setup' ? null : '/setup';
       }
@@ -224,6 +270,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           final isDriver = state.extra as bool? ?? false;
           return SignUpPage(isDriver: isDriver);
         },
+      ),
+      GoRoute(
+        path: '/driver-docs',
+        builder: (context, state) => const DriverDocumentUploadScreen(),
       ),
     ],
   );
