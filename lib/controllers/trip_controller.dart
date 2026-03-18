@@ -9,7 +9,11 @@ final tripRepositoryProvider = Provider((ref) => TripRepository());
 
 // Stream for Drivers to see available rides
 final pendingTripsProvider = StreamProvider<List<TripModel>>((ref) {
-  // Changed to ref.watch for better reactivity
+  final currentUser = ref.watch(currentUserProvider);
+  // If the driver is currently busy, cut off the broadcast stream so they do not receive any more pending ride requests.
+  if (currentUser?.mode == DriverMode.busy) {
+    return Stream.value([]);
+  }
   return ref.watch(tripRepositoryProvider).streamPendingTrips();
 });
 
@@ -22,7 +26,6 @@ final activeTripStreamProvider = StreamProvider.family<TripModel?, String>((
   return ref.watch(tripRepositoryProvider).streamTrip(tripID);
 });
 
-// 1. UPDATED to NotifierProvider
 final tripControllerProvider =
     NotifierProvider<TripController, AsyncValue<void>>(() {
       return TripController();
@@ -36,7 +39,7 @@ class TripController extends Notifier<AsyncValue<void>> {
     return const AsyncValue.data(null);
   }
 
-  // 4. Easy getter to access the repository using the internal 'ref'
+  // Getter to access the repository using the internal 'ref'
   TripRepository get _repository => ref.read(tripRepositoryProvider);
 
   Future<void> requestRide(TripModel trip) async {
@@ -53,11 +56,20 @@ class TripController extends Notifier<AsyncValue<void>> {
   Future<void> acceptRide(String tripID, String driverID) async {
     state = const AsyncValue.loading();
     try {
-      // Updated to use the new flexible repository method
+      // 1. Assign driver and confirm trip
       await _repository.updateTripData(tripID, {
-        'status': 'confirmed',
+        'status': TripStatus.confirmed.name,
         'driverID': driverID,
       });
+
+      // Set the driver's mode to busy
+      await ref.read(userRepositoryProvider).updateUser(driverID, {
+        'mode': DriverMode.busy.name,
+      });
+
+      // Refresh local user state so the pendingTripsProvider instantly cuts off
+      await ref.read(authControllerProvider.notifier).refreshUser();
+
       state = const AsyncValue.data(null);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
@@ -104,6 +116,17 @@ class TripController extends Notifier<AsyncValue<void>> {
         'status': TripStatus.cancelled.name,
       });
 
+      final tripDoc = await FirebaseFirestore.instance.collection('trips').doc(tripID).get();
+      if (!tripDoc.exists) throw Exception("Trip not found");
+      final tripData = tripDoc.data() as Map<String, dynamic>;
+
+      final assignedDriverID = tripData['driverID'];
+      if (assignedDriverID != null) {
+        await ref.read(userRepositoryProvider).updateUser(assignedDriverID, {
+          'mode': DriverMode.online.name,
+        });
+      }
+
       // 4. Record this new cancellation timestamp to the user's profile
       recentCancels.add(Timestamp.fromDate(now));
       await ref.read(userRepositoryProvider).updateUser(currentUser.userID, {
@@ -128,6 +151,30 @@ class TripController extends Notifier<AsyncValue<void>> {
       await _repository.updateTripData(tripID, {
         isDriver ? 'driverEnd' : 'commuterEnd': true,
       });
+      // RULE 3: Fetch the trip to check if BOTH parties have marked it as completed
+      final tripDoc = await FirebaseFirestore.instance.collection('trips').doc(tripID).get();
+      final tripData = tripDoc.data() as Map<String, dynamic>;
+      
+      final driverEnd = tripData['driverEnd'] ?? false;
+      final commuterEnd = tripData['commuterEnd'] ?? false;
+
+      // If both are true, finalize the ride and free the driver
+      if (driverEnd && commuterEnd) {
+        await _repository.updateTripData(tripID, {
+          'status': TripStatus.completed.name,
+        });
+
+        // Revert the driver back to online so they can accept new rides
+        final assignedDriverID = tripData['driverID'];
+        if (assignedDriverID != null) {
+          await ref.read(userRepositoryProvider).updateUser(assignedDriverID, {
+            'mode': DriverMode.online.name,
+          });
+        }
+      }
+
+      // Sync the state (especially critical if this user is the driver transitioning back to online)
+      await ref.read(authControllerProvider.notifier).refreshUser();
       state = const AsyncValue.data(null);
     } catch (e, st) {
       state = AsyncValue.error(e, st);

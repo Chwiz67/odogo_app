@@ -1,8 +1,12 @@
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:odogo_app/models/enums.dart';
 import 'package:odogo_app/models/user_model.dart';
 import 'package:odogo_app/models/vehicle_model.dart';
 import 'package:odogo_app/repositories/user_repository.dart';
+import 'package:odogo_app/services/phone_auth_service.dart';
+import 'package:odogo_app/services/storage_service.dart';
 import 'auth_controller.dart'; // To get the current user's ID
 
 // 1. A provider to easily access the repository
@@ -29,6 +33,7 @@ class UserController extends Notifier<AsyncValue<void>> {
   }
 
   UserRepository get _repository => ref.read(userRepositoryProvider);
+  SmsOtpAuthService get _phoneService => SmsOtpAuthService.instance;
 
   /// A generic helper to get the current UID safely
   String _getUid() {
@@ -87,6 +92,116 @@ class UserController extends Notifier<AsyncValue<void>> {
         'name': newName,
       });
       await ref.read(authControllerProvider.notifier).refreshUser();
+      state = const AsyncValue.data(null);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+    }
+  }
+
+  Future<void> updateGender(String gender) async {
+    state = const AsyncValue.loading();
+    try {
+      await _repository.updateUser(_getUid(), {
+        'gender': gender,
+      });
+      await ref.read(authControllerProvider.notifier).refreshUser();
+      state = const AsyncValue.data(null);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+    }
+  }
+
+  Future<void> updateDoB(String dob) async {
+    state = const AsyncValue.loading();
+    try {
+      await _repository.updateUser(_getUid(), {
+        'dob': dob,
+      });
+      await ref.read(authControllerProvider.notifier).refreshUser();
+      state = const AsyncValue.data(null);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+    }
+  }
+
+  // Change phone number functionality
+  /// Step 1: Fires the SMS to the new phone number
+  // Future<void> initiatePhoneUpdate(String newPhone) async {
+  //   state = const AsyncValue.loading();
+  //   try {
+  //     await _phoneService.sendOtp(phoneNumber: newPhone);
+  //     // We return success here so the UI knows it's safe to push the OTP Screen
+  //     state = const AsyncValue.data(null);
+  //   } catch (e, st) {
+  //     state = AsyncValue.error(e, st);
+  //   }
+  // }
+
+  // /// Step 2: Verifies the code and permanently saves the new number
+  // Future<void> verifyAndSavePhone(String newPhone, String otp) async {
+  //   state = const AsyncValue.loading();
+  //   try {
+  //     final isValid = _phoneService.verifyOtp(phoneNumber: newPhone, otp: otp);
+  //     if (!isValid) {
+  //       throw Exception("Invalid OTP. Please check the code and try again.");
+  //     }
+
+  //     // If Firebase Auth accepts it, save it to our Firestore database
+  //     await _repository.updateUser(_getUid(), {'phoneNo': newPhone});
+      
+  //     // Sync the local app memory
+  //     await ref.read(authControllerProvider.notifier).refreshUser();
+
+  //     state = const AsyncValue.data(null);
+  //   } catch (e, st) {
+  //     state = AsyncValue.error(e, st);
+  //   }
+  // }  // currently commented because we need to set up an API key for otp service. I have the code (not yet pushed) for the serice but not yet made API key
+
+  // Document upload functionality
+  Future<void> uploadAndSaveDocument(String docType, bool isVehicleDoc) async {
+    state = const AsyncValue.loading();
+    try {
+      final uid = _getUid();
+
+      // 1. Open the phone's file picker (allow images & PDFs)
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
+      );
+
+      if (result == null || result.files.single.path == null) {
+        // User canceled the picker
+        state = const AsyncValue.data(null);
+        return; 
+      }
+
+      File file = File(result.files.single.path!);
+
+      // 2. Upload the physical file to Firebase Storage
+      final downloadUrl = await StorageService.instance.uploadDocument(
+        uid: uid,
+        documentType: docType,
+        file: file,
+      );
+
+      // 3. Save the URL to the correct place in Firestore
+      if (isVehicleDoc) {
+        // For RC, PUC, Insurance (Embedded in VehicleModel)
+        // We have to update the specific key inside the embedded map
+        await _repository.updateUser(uid, {
+          'vehicle.$docType': downloadUrl,
+        });
+      } else {
+        // For Aadhar or License (Directly on UserModel)
+        await _repository.updateUser(uid, {
+          docType: downloadUrl,
+        });
+      }
+
+      // 4. Refresh the global user state so the UI updates
+      await ref.read(authControllerProvider.notifier).refreshUser();
+
       state = const AsyncValue.data(null);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
