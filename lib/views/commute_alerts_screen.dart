@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/notification_permission_service.dart';
 
 class CommuteAlertsScreen extends StatefulWidget {
   const CommuteAlertsScreen({super.key});
@@ -9,21 +10,90 @@ class CommuteAlertsScreen extends StatefulWidget {
 
 class _CommuteAlertsScreenState extends State<CommuteAlertsScreen> {
   // Toggle state for daily route updates
-  bool _notificationsEnabled = true;
+  bool _notificationsEnabled = false;
+  bool _isLoading = true;
+  bool _isPermanentlyDenied = false;
+  
+  final NotificationPermissionService _permissionService = NotificationPermissionService();
 
-  void _saveSettings() {
-    print("Commute Alerts enabled: $_notificationsEnabled");
-    
-    // Show a quick success popup
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Alert settings updated successfully!'), 
-        backgroundColor: Colors.green,
-      ),
-    );
-    
-    // Return to the Profile Page
-    Navigator.pop(context);
+  @override
+  void initState() {
+    super.initState();
+    _loadNotificationSettings();
+  }
+
+  Future<void> _loadNotificationSettings() async {
+    try {
+      final isGranted = await _permissionService.isNotificationPermissionGranted();
+      final savedPreference = await _permissionService.getNotificationPreference();
+      final isPermanentlyDenied = await _permissionService.isPermissionPermanentlyDenied();
+      
+      setState(() {
+        // Use actual permission status if granted, otherwise use saved preference
+        _notificationsEnabled = isGranted && savedPreference;
+        _isPermanentlyDenied = isPermanentlyDenied;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      print('Error loading notification settings: $e');
+    }
+  }
+
+  Future<void> _handleNotificationToggle(bool value) async {
+    if (value) {
+      // User is turning ON notifications - request permission
+      if (!_isPermanentlyDenied) {
+        final granted = await _permissionService.requestNotificationPermission();
+        setState(() {
+          _notificationsEnabled = granted;
+          if (granted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Notifications enabled! You\'ll receive commute alerts.'),
+                backgroundColor: Color(0xFF66D2A3),
+                duration: Duration(seconds: 2),
+              ),
+            );
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Notification permission denied. Please enable it in settings.'),
+                backgroundColor: Colors.orange,
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        });
+      } else {
+        // Permission permanently denied - open app settings
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Please enable notifications in app settings'),
+            backgroundColor: Colors.orange,
+            action: SnackBarAction(
+              label: 'Settings',
+              onPressed: () {
+                _permissionService.openSettings();
+              },
+            ),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } else {
+      // User is turning OFF notifications
+      await _permissionService.disableNotifications();
+      setState(() => _notificationsEnabled = false);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Notifications disabled'),
+          backgroundColor: Colors.grey,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   @override
@@ -58,7 +128,7 @@ class _CommuteAlertsScreenState extends State<CommuteAlertsScreen> {
             children: [
               const Row(
                 children: [
-                  Icon(Icons.notification_important, size: 36, color: Color.fromARGB(255, 0, 0, 0)), // Your orange highlight
+                  Icon(Icons.notification_important, size: 36, color: Color.fromARGB(255, 0, 0, 0)),
                   SizedBox(width: 12),
                   Text('Commute Alerts', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87)),
                 ],
@@ -66,25 +136,90 @@ class _CommuteAlertsScreenState extends State<CommuteAlertsScreen> {
               const SizedBox(height: 32),
               
               // Notification Toggle
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: SwitchListTile(
-                  title: const Text('Notifications', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                  subtitle: const Text('Enable daily route updates'),
-                  value: _notificationsEnabled,
-                  activeThumbColor: const Color.fromARGB(255, 0, 0, 0), // Matches the icon
-                  onChanged: (bool value) {
-                    setState(() => _notificationsEnabled = value);
-                  },
-                ),
-              ),
+              _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: SwitchListTile(
+                        title: const Text('Notifications', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                        subtitle: Text(
+                          _notificationsEnabled 
+                            ? 'Daily route updates enabled' 
+                            : 'Daily route updates disabled',
+                        ),
+                        value: _notificationsEnabled,
+                        activeThumbColor: const Color(0xFF66D2A3),
+                        activeTrackColor: const Color(0xFF66D2A3).withOpacity(0.3),
+                        onChanged: _handleNotificationToggle,
+                      ),
+                    ),
               
-              const Spacer(), // Pushes the save button to the bottom
+              const SizedBox(height: 16),
               
-              // Full-width save button
+              // Info box
+              if (!_notificationsEnabled)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange, width: 1),
+                  ),
+                  child: Row(
+                    children: const [
+                      Icon(Icons.info_outline, color: Colors.orange, size: 20),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'You won\'t receive commute alerts. Turn on to get notified about your daily routes.',
+                          style: TextStyle(fontSize: 12, color: Colors.orange),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              
+              if (_isPermanentlyDenied)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red, width: 1),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning, color: Colors.red, size: 20),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Permission Permanently Blocked',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.red),
+                            ),
+                            const SizedBox(height: 4),
+                            GestureDetector(
+                              onTap: () => _permissionService.openSettings(),
+                              child: const Text(
+                                'Open Settings to enable notifications',
+                                style: TextStyle(fontSize: 12, color: Colors.red, decoration: TextDecoration.underline),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              
+              const Spacer(),
+              
+              // Close button
               SizedBox(
                 width: double.infinity,
                 height: 56,
@@ -93,8 +228,8 @@ class _CommuteAlertsScreenState extends State<CommuteAlertsScreen> {
                     backgroundColor: const Color.fromARGB(255, 0, 0, 0),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  onPressed: _saveSettings,
-                  child: const Text('Save Settings', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Done', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],

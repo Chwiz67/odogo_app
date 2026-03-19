@@ -27,8 +27,8 @@
 		<key>LSRequiresIPhoneOS</key>
 		<true/>
 		<key>NSLocationWhenInUseUsageDescription</key>
-		<string>OdoGo uses your location to show your current position on the map.</string>
-		<key>UIApplicationSceneManifest</key>
+		<string>OdoGo uses your location to show your current position on the map.</string>	<key>NSUserNotificationUsageDescription</key>
+	<string>OdoGo needs permission to send you commute alerts and updates about your rides.</string>		<key>UIApplicationSceneManifest</key>
 		<dict>
 			<key>UIApplicationSupportsMultipleScenes</key>
 			<false/>
