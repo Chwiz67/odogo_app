@@ -1,67 +1,122 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart'; 
+import '../controllers/auth_controller.dart'; 
+import '../models/trip_model.dart'; 
+import '../models/enums.dart'; // To access TripStatus
 
-// Definining the brand colors from the image
+// Brand colors
 const Color odoGoGreen = Color(0xFF66D2A3);
 const Color appBarColor = Colors.black;
 const Color scaffoldColor = Colors.white;
 
-class BookingsScreen extends StatefulWidget {
+// --- RIVERPOD STREAM PROVIDER ---
+// Fetches all trips where this specific user is the commuter, and maps them to your TripModel
+final commuterTripsProvider = StreamProvider.autoDispose<List<TripModel>>((ref) {
+  final currentUser = ref.watch(currentUserProvider);
+  
+  if (currentUser == null) return Stream.value([]);
+
+  return FirebaseFirestore.instance
+      .collection('trips')
+      .where('commuterID', isEqualTo: currentUser.userID)
+      .snapshots()
+      .map((snapshot) => snapshot.docs
+          .map((doc) => TripModel.fromJson(doc.data()))
+          .toList());
+});
+
+
+class BookingsScreen extends ConsumerStatefulWidget {
   const BookingsScreen({super.key});
 
   @override
-  State<BookingsScreen> createState() => _BookingsScreenState();
+  ConsumerState<BookingsScreen> createState() => _BookingsScreenState();
 }
 
-class _BookingsScreenState extends State<BookingsScreen> {
-  // Toggle state for booking categories (0 = Past, 1 = Upcoming)
+class _BookingsScreenState extends ConsumerState<BookingsScreen> {
+  // 0 = Past, 1 = Upcoming
   int _selectedTab = 0;
-
-  // Placeholder data matching the image
-  final List<BookingData> _pastBookingsData = [
-    const BookingData(
-      location: 'Academic Area Gate 3 -> HC',
-      dateTime: '22 January, 2026, 1:06 P.M.',
-      driverName: 'Avtansh',
-      rikshawNo: 'UP07HC1959',
-      driverPhoneNo: '1234567890',
-    ),
-    const BookingData(
-      location: 'Home -> OAT',
-      dateTime: '20 January, 2026, 6:54 P.M.',
-      driverName: 'Archit',
-      rikshawNo: 'UP11AB2026',
-      driverPhoneNo: '1111111111',
-    ),
-  ];
 
   @override
   Widget build(BuildContext context) {
-    // Determine the content based on the selected tab
-    List<BookingData> currentBookings = _selectedTab == 0 ? _pastBookingsData : [];
+    // Watch the stream provider we created above
+    final tripsAsyncValue = ref.watch(commuterTripsProvider);
 
     return Scaffold(
-      backgroundColor: scaffoldColor, // Match the main background color in the image
+      backgroundColor: scaffoldColor,
       appBar: _buildAppBar(),
       body: Column(
         children: [
           _buildSegmentedControl(),
           const SizedBox(height: 16),
+          
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: currentBookings.length,
-              itemBuilder: (context, index) => _buildBookingCard(currentBookings[index]),
+            child: tripsAsyncValue.when(
+              loading: () => const Center(
+                child: CircularProgressIndicator(color: odoGoGreen)
+              ),
+              error: (error, stack) => Center(
+                child: Text('Error loading bookings: $error')
+              ),
+              data: (allTrips) {
+                if (allTrips.isEmpty) {
+                  return const Center(
+                    child: Text('No bookings found.', style: TextStyle(color: Colors.grey, fontSize: 16)),
+                  );
+                }
+
+                // --- FILTERING LOGIC ---
+                // Sort trips into Upcoming (active) and Past (finished) based on your TripStatus enum
+                final upcomingTrips = allTrips.where((trip) => 
+                  trip.status == TripStatus.pending || 
+                  trip.status == TripStatus.confirmed || 
+                  trip.status == TripStatus.ongoing
+                ).toList();
+
+                final pastTrips = allTrips.where((trip) => 
+                  trip.status == TripStatus.completed || 
+                  trip.status == TripStatus.cancelled
+                ).toList();
+
+                // Select the correct list based on the tab
+                final displayList = _selectedTab == 0 ? pastTrips : upcomingTrips;
+
+                // Sort the display list so the newest trips appear at the top
+                // Fallback to eta if scheduledTime is null
+                displayList.sort((a, b) {
+                  final timeA = a.scheduledTime?.toDate() ?? a.eta?.toDate() ?? DateTime.now();
+                  final timeB = b.scheduledTime?.toDate() ?? b.eta?.toDate() ?? DateTime.now();
+                  return timeB.compareTo(timeA); // Descending order
+                });
+
+                if (displayList.isEmpty) {
+                  return Center(
+                    child: Text(
+                      _selectedTab == 0 ? 'No past bookings.' : 'No upcoming bookings.',
+                      style: const TextStyle(color: Colors.grey, fontSize: 16)
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: displayList.length,
+                  itemBuilder: (context, index) {
+                    return _buildBookingCard(displayList[index]);
+                  },
+                );
+              },
             ),
           ),
         ],
       ),
-      // The bottom nav bar is handled by the parent shell, as requested.
     );
   }
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-      // 1. INCREASED: Makes the black strip noticeably taller
       toolbarHeight: 80, 
       backgroundColor: appBarColor, 
       elevation: 0,
@@ -74,23 +129,20 @@ class _BookingsScreenState extends State<BookingsScreen> {
           children: [
             Image.asset(
               'assets/images/odogo_logo_black_bg.jpeg',
-              // 2. INCREASED: Made the logo proportionally larger
               height: 40, 
               fit: BoxFit.contain,
               errorBuilder: (context, error, stackTrace) {
-                // Increased the fallback icon size to match as well
                 return const Icon(Icons.electric_rickshaw, color: odoGoGreen, size: 45); 
               },
             ),
-            const SizedBox(height: 3), // Added a tiny gap so it breathes better
+            const SizedBox(height: 3), 
             const Text(
               'OdoGo',
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
-                // 3. INCREASED: Made the text proportionally larger
                 fontSize: 18, 
-                letterSpacing: 1.2, // Added a slight letter spacing for a premium look
+                letterSpacing: 1.2, 
               ),
             ),
           ],
@@ -104,7 +156,7 @@ class _BookingsScreenState extends State<BookingsScreen> {
     return Container(
       margin: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey[900], // Dark background for the whole toggle bar
+        color: Colors.grey[900], 
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -116,7 +168,6 @@ class _BookingsScreenState extends State<BookingsScreen> {
     );
   }
 
-  // Makes the Past/Upcoming buttons interactive with the Green styling
   Widget _buildTab(String title, int index) {
     bool isSelected = _selectedTab == index;
     return Expanded(
@@ -129,14 +180,14 @@ class _BookingsScreenState extends State<BookingsScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
-            color: isSelected ? odoGoGreen : Colors.transparent, // Highlights green when clicked
+            color: isSelected ? odoGoGreen : Colors.transparent, 
             borderRadius: BorderRadius.circular(12),
           ),
           child: Center(
             child: Text(
               title,
               style: TextStyle(
-                color: isSelected ? Colors.black : Colors.white70, // Adjusts text color for readability
+                color: isSelected ? Colors.black : Colors.white70, 
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
               ),
@@ -147,73 +198,82 @@ class _BookingsScreenState extends State<BookingsScreen> {
     );
   }
 
-  Widget _buildBookingCard(BookingData booking) {
+  Widget _buildBookingCard(TripModel trip) {
+    // 1. Format the Date (Uses scheduledTime, falls back to ETA, or shows 'Immediate Ride')
+    String formattedDate = 'Immediate Ride';
+    if (trip.scheduledTime != null) {
+      formattedDate = DateFormat("d MMMM, yyyy, h:mm a").format(trip.scheduledTime!.toDate());
+    } else if (trip.eta != null) {
+      formattedDate = DateFormat("d MMMM, yyyy, h:mm a").format(trip.eta!.toDate());
+    }
+
+    // 2. Format Status Text (e.g., "TripStatus.completed" -> "Completed")
+    String statusText = trip.status.name.toUpperCase();
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey[400]!, width: 1), // Subtle border like the image
+        border: Border.all(color: Colors.grey[400]!, width: 1), 
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start, // Align icon with the top of text
+          crossAxisAlignment: CrossAxisAlignment.start, 
           children: [
-            // History icon in a circle on the left, with brand color
             Container(
-              padding: const EdgeInsets.all(6), // Smaller padding for a tighter look
+              padding: const EdgeInsets.all(6), 
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: odoGoGreen, width: 2), // Full-stroke circle like the image
+                border: Border.all(color: odoGoGreen, width: 2), 
               ),
               child: const Icon(Icons.history_rounded, color: odoGoGreen, size: 24),
             ),
             const SizedBox(width: 16),
-            // The detailed text block
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Locations mapped directly from TripModel
                   Text(
-                    booking.location,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold, 
-                      color: Colors.black, 
-                      fontSize: 16,
-                    ),
+                    '${trip.startLocName} -> ${trip.endLocName}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black, fontSize: 16),
                   ),
                   const SizedBox(height: 2),
+                  
+                  // Formatted Date
                   Text(
-                    booking.dateTime,
+                    formattedDate,
+                    style: TextStyle(color: Colors.grey[700], fontSize: 14),
+                  ),
+                  const SizedBox(height: 4),
+                  
+                  // Status Badge
+                  Text(
+                    'Status: $statusText',
                     style: TextStyle(
-                      color: Colors.grey[700], 
+                      color: trip.status == TripStatus.cancelled ? Colors.red : odoGoGreen, 
+                      fontWeight: FontWeight.bold,
                       fontSize: 14,
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    'Driver: ${booking.driverName}',
-                    style: const TextStyle(
-                      color: Colors.black, 
-                      fontSize: 14,
+                  
+                  // PIN Display (Only show for upcoming active rides)
+                  if (_selectedTab == 1 && trip.status != TripStatus.pending)
+                    Text(
+                      'Ride PIN: ${trip.ridePIN}',
+                      style: const TextStyle(color: Colors.black, fontSize: 14, fontWeight: FontWeight.bold),
                     ),
-                  ),
                   const SizedBox(height: 2),
+
+                  // NOTE: Because TripModel only holds 'driverID', we cannot display the driver's name, 
+                  // phone number, or rickshaw details here yet without fetching the driver's User document.
+                  // For now, we indicate if a driver is assigned or pending.
                   Text(
-                    'Rikshaw No: ${booking.rikshawNo}',
-                    style: const TextStyle(
-                      color: Colors.black, 
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Driver Phone No- ${booking.driverPhoneNo}',
-                    style: const TextStyle(
-                      color: Colors.black, 
-                      fontSize: 14,
-                    ),
+                    'Driver ID: ${trip.driverID ?? 'Looking for drivers...'}',
+                    style: const TextStyle(color: Colors.black, fontSize: 14),
                   ),
                 ],
               ),
@@ -223,21 +283,4 @@ class _BookingsScreenState extends State<BookingsScreen> {
       ),
     );
   }
-}
-
-// Simple data model for a booking
-class BookingData {
-  final String location;
-  final String dateTime;
-  final String driverName;
-  final String rikshawNo;
-  final String driverPhoneNo;
-
-  const BookingData({
-    required this.location,
-    required this.dateTime,
-    required this.driverName,
-    required this.rikshawNo,
-    required this.driverPhoneNo,
-  });
 }
