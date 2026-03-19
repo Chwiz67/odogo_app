@@ -1,19 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'ride_confirmed_screen.dart';
 
-class WaitingForDriverScreen extends StatefulWidget {
+class WaitingForDriverScreen extends ConsumerStatefulWidget { // Or ConsumerWidget
+  // 1. ADD THIS LINE: Tell the screen to expect a string
   final LatLng? dropoffPoint;
   final LatLng? pickupPoint;
+  final String tripID;
 
-  const WaitingForDriverScreen({super.key, this.dropoffPoint, this.pickupPoint});
+  // 2. UPDATE THE CONSTRUCTOR: Require the tripID when the screen is built
+  const WaitingForDriverScreen({super.key, required this.tripID, this.dropoffPoint, this.pickupPoint});
 
   @override
-  State<WaitingForDriverScreen> createState() => _WaitingForDriverScreenState();
+  ConsumerState<WaitingForDriverScreen> createState() => _WaitingForDriverScreenState();
 }
 
-class _WaitingForDriverScreenState extends State<WaitingForDriverScreen> {
+class _WaitingForDriverScreenState extends ConsumerState<WaitingForDriverScreen> {
   @override
   void initState() {
     super.initState();

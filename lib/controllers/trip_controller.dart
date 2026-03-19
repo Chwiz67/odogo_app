@@ -89,56 +89,88 @@ class TripController extends Notifier<AsyncValue<void>> {
     }
   }
 
-  /// User: Cancels the ride (while ensuring max 2 cancels in 15 mins)
+  /// User/Driver: Cancels the ride with smart constraint rules and re-broadcasting
   Future<void> cancelRide(String tripID) async {
     state = const AsyncValue.loading();
     try {
-      // 1. Grab the current user's data
       final currentUser = ref.read(currentUserProvider);
       if (currentUser == null) throw Exception("User not authenticated.");
 
-      // 2. Check the 15-minute rule
-      final now = DateTime.now();
-      final fifteenMinsAgo = now.subtract(const Duration(minutes: 15));
-      
-      // Filter the history to only count cancellations within the last 15 mins
-      final recentCancels = currentUser.cancelHistory?.where((timestamp) {
-        return timestamp.toDate().isAfter(fifteenMinsAgo);
-      }).toList() ?? [];
-
-      // Enforce the rule
-      if (recentCancels.length >= 2) {
-        throw Exception("You can cancel a maximum of 2 rides in 15 minutes.");
-      }
-
-      // 3. If they pass the check, update the trip status
-      await _repository.updateTripData(tripID, {
-        'status': TripStatus.cancelled.name,
-      });
-
+      // 1. Fetch trip data FIRST to understand the current state
       final tripDoc = await FirebaseFirestore.instance.collection('trips').doc(tripID).get();
       if (!tripDoc.exists) throw Exception("Trip not found");
       final tripData = tripDoc.data() as Map<String, dynamic>;
 
-      final assignedDriverID = tripData['driverID'];
-      if (assignedDriverID != null) {
-        await ref.read(userRepositoryProvider).updateUser(assignedDriverID, {
+      // Determine roles and trip state
+      final bool isDriverCancelling = currentUser.role == UserRole.driver;
+      final bool isCommuterCancelling = currentUser.role == UserRole.commuter;
+      final bool hasDriverAccepted = tripData['driverID'] != null;
+
+      // 2. Determine if the strike constraint applies
+      bool applyConstraint = true;
+      
+      // RULE: Free cancellation for commuters if no driver has accepted yet
+      if (isCommuterCancelling && !hasDriverAccepted) {
+        applyConstraint = false; 
+      }
+
+      final now = DateTime.now();
+      List<Timestamp> recentCancels = [];
+
+      // 3. Enforce the 15-minute constraint if applicable
+      if (applyConstraint) {
+        final fifteenMinsAgo = now.subtract(const Duration(minutes: 15));
+        
+        recentCancels = currentUser.cancelHistory?.where((timestamp) {
+          return timestamp.toDate().isAfter(fifteenMinsAgo);
+        }).toList() ?? [];
+
+        if (recentCancels.length >= 2) {
+          throw Exception("You can cancel a maximum of 2 rides in 15 minutes.");
+        }
+      }
+
+      // 4. Execute the specific cancellation logic based on WHO is cancelling
+      if (isDriverCancelling) {
+        // RULE: Driver cancels. Re-broadcast the trip!
+        // We set status back to pending and completely delete the driverID from the document.
+        await _repository.updateTripData(tripID, {
+          'status': TripStatus.pending.name,
+          'driverID': FieldValue.delete(), 
+        });
+
+        // Free up this driver so they can receive other broadcasts
+        await ref.read(userRepositoryProvider).updateUser(currentUser.userID, {
           'mode': DriverMode.online.name,
+        });
+
+      } else if (isCommuterCancelling) {
+        // RULE: Commuter cancels. The trip is dead.
+        await _repository.updateTripData(tripID, {
+          'status': TripStatus.cancelled.name,
+        });
+
+        // If a driver was already attached to this doomed trip, free them up!
+        if (hasDriverAccepted) {
+          await ref.read(userRepositoryProvider).updateUser(tripData['driverID'], {
+            'mode': DriverMode.online.name,
+          });
+        }
+      }
+
+      // 5. Record the strike ONLY if the constraint applied
+      if (applyConstraint) {
+        recentCancels.add(Timestamp.fromDate(now));
+        await ref.read(userRepositoryProvider).updateUser(currentUser.userID, {
+          'cancelHistory': recentCancels,
         });
       }
 
-      // 4. Record this new cancellation timestamp to the user's profile
-      recentCancels.add(Timestamp.fromDate(now));
-      await ref.read(userRepositoryProvider).updateUser(currentUser.userID, {
-        'cancelHistory': recentCancels,
-      });
-
-      // Refresh the local user state
+      // Sync the local user state
       await ref.read(authControllerProvider.notifier).refreshUser();
 
       state = const AsyncValue.data(null);
     } catch (e, st) {
-      // The UI will catch this error and show the "Please wait 15 minutes" message
       state = AsyncValue.error(e, st);
     }
   }

@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:odogo_app/controllers/auth_controller.dart';
+import 'package:odogo_app/controllers/user_controller.dart';
+import 'package:odogo_app/models/enums.dart';
 import 'dart:async';
 
 // 1. LINKING THE PROFILE & BOOKINGS PAGES
@@ -9,14 +13,14 @@ import 'driver_profile_screen.dart';
 import 'driver_bookings_screen.dart';
 import 'driver_active_pickup_screen.dart';
 
-class DriverHomeScreen extends StatefulWidget {
+class DriverHomeScreen extends ConsumerStatefulWidget {
   const DriverHomeScreen({super.key});
 
   @override
-  State<DriverHomeScreen> createState() => _DriverHomeScreenState();
+  ConsumerState<DriverHomeScreen> createState() => _DriverHomeScreenState();
 }
 
-class _DriverHomeScreenState extends State<DriverHomeScreen> {
+class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
   final Color odogoGreen = const Color(0xFF66D2A3);
   final MapController _mapController = MapController();
   static const LatLng _defaultCenter = LatLng(26.5123, 80.2329);
@@ -50,7 +54,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   int _selectedIndex = 0; // 0 = Map, 1 = Bookings, 2 = Profile
 
   // --- MAP STATE ---
-  bool _isOnline = false;
+  // bool _isOnline = false;
   bool _hasIncomingRequest = false;
   Timer? _simulationTimer;
 
@@ -137,31 +141,70 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   }
 
   // --- MAP LOGIC ---
-  void _toggleOnlineState() {
-    setState(() {
-      _isOnline = !_isOnline;
-      if (!_isOnline) {
-        _hasIncomingRequest = false;
-        _simulationTimer?.cancel();
-      }
-    });
+  // void _toggleOnlineState() {
+  //   setState(() {
+  //     _isOnline = !_isOnline;
+  //     if (!_isOnline) {
+  //       _hasIncomingRequest = false;
+  //       _simulationTimer?.cancel();
+  //     }
+  //   });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(_isOnline ? 'You are now ONLINE.' : 'You are OFFLINE.'),
-        backgroundColor: _isOnline ? odogoGreen : Colors.red,
-        duration: const Duration(seconds: 2),
-      ),
-    );
+  //   ScaffoldMessenger.of(context).showSnackBar(
+  //     SnackBar(
+  //       content: Text(_isOnline ? 'You are now ONLINE.' : 'You are OFFLINE.'),
+  //       backgroundColor: _isOnline ? odogoGreen : Colors.red,
+  //       duration: const Duration(seconds: 2),
+  //     ),
+  //   );
 
-    if (_isOnline) {
+  //   if (_isOnline) {
+  //     _simulationTimer = Timer(const Duration(seconds: 4), () {
+  //       if (mounted && _isOnline) {
+  //         setState(() {
+  //           _hasIncomingRequest = true;
+  //         });
+  //       }
+  //     });
+  //   }
+  // }
+  Future<void> _toggleOnlineState() async {
+    // 1. Get the current user to check their status
+    final currentUser = ref.read(currentUserProvider);
+    if (currentUser == null) return;
+
+    // 2. Determine what the NEW mode should be
+    final isCurrentlyOnline = currentUser.mode == DriverMode.online;
+    final newMode = isCurrentlyOnline ? DriverMode.offline : DriverMode.online;
+
+    // 3. Tell the backend to update the database
+    await ref.read(userControllerProvider.notifier).updateDriverMode(newMode);
+
+    // 4. Show the SnackBar
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(newMode == DriverMode.online ? 'You are now ONLINE.' : 'You are OFFLINE.'),
+          backgroundColor: newMode == DriverMode.online ? odogoGreen : Colors.red,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+
+    // 5. Handle your simulation timer based on the new mode
+    if (newMode == DriverMode.online) {
       _simulationTimer = Timer(const Duration(seconds: 4), () {
-        if (mounted && _isOnline) {
+        if (mounted && ref.read(currentUserProvider)?.mode == DriverMode.online) {
           setState(() {
             _hasIncomingRequest = true;
           });
         }
       });
+    } else {
+      setState(() {
+        _hasIncomingRequest = false;
+      });
+      _simulationTimer?.cancel();
     }
   }
 
@@ -173,16 +216,20 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   );
 }
 
-  @override
+  @override // Removed the duplicate @override
   Widget build(BuildContext context) {
     _measureBottomOverlayHeight();
+
+    // WATCH THE BACKEND FOR REAL-TIME STATUS
+    final currentUser = ref.watch(currentUserProvider);
+    final _isOnline = currentUser?.mode == DriverMode.online;
 
     return Scaffold(
       backgroundColor: Colors.white, 
       body: IndexedStack(
         index: _selectedIndex,
         children: [
-          _buildMapHome(),       
+          _buildMapHome(_isOnline), // 1. PASS IT HERE
           const DriverBookingsScreen(), 
           const DriverProfileScreen(),   
         ],
@@ -204,7 +251,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   // ==========================================
   // VIEW 1: THE MAP DASHBOARD
   // ==========================================
-  Widget _buildMapHome() {
+  Widget _buildMapHome(bool _isOnline) {
     return Stack(
       children: [
         FlutterMap(

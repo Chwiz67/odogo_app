@@ -1,13 +1,18 @@
 import 'dart:convert';
-
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
+import 'package:odogo_app/controllers/auth_controller.dart';
+import 'package:odogo_app/controllers/trip_controller.dart';
+import 'package:odogo_app/models/enums.dart';
+import 'package:odogo_app/models/trip_model.dart';
 import 'waiting_for_driver_screen.dart'; // Import the waiting screen!
+import 'dart:math';
 
-class TripConfirmationScreen extends StatefulWidget {
+class TripConfirmationScreen extends ConsumerStatefulWidget {
   final String destination;
   final String pickupLabel;
   final LatLng? pickupPoint;
@@ -25,10 +30,10 @@ class TripConfirmationScreen extends StatefulWidget {
   });
 
   @override
-  State<TripConfirmationScreen> createState() => _TripConfirmationScreenState();
+  ConsumerState<TripConfirmationScreen> createState() => _TripConfirmationScreenState();
 }
 
-class _TripConfirmationScreenState extends State<TripConfirmationScreen> {
+class _TripConfirmationScreenState extends ConsumerState<TripConfirmationScreen> {
   List<LatLng>? _routePoints;
   static const double _minFitDistanceMeters = 5;
 
@@ -233,24 +238,67 @@ class _TripConfirmationScreenState extends State<TripConfirmationScreen> {
                     address: widget.destination,
                   ),
                   const SizedBox(height: 24),
-                  
-                  // Confirm Button
+
                   ElevatedButton(
-                    onPressed: () {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => WaitingForDriverScreen(
-                            dropoffPoint: widget.dropoffPoint,
-                            pickupPoint: widget.pickupPoint,
-                          ),
-                        ),
+                    onPressed: () async {
+                      // 1. Grab the current user
+                      final currentUser = ref.read(currentUserProvider);
+                      if (currentUser == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Error: User not logged in')),
+                        );
+                        return;
+                      }
+
+                      final String uniqueTripId = 'trip_${DateTime.now().millisecondsSinceEpoch}';
+                      
+                      // Generate a random 4-digit PIN
+                      final String generatedPin = Random().nextInt(10000).toString().padLeft(4, '0');
+
+                      // 3. Create the TripModel
+                      final newTrip = TripModel(
+                        tripID: uniqueTripId,
+                        commuterID: currentUser.userID,
+                        driverID: null, 
+                        startLocName: widget.pickupLabel,
+                        endLocName: widget.destination,
+                        status: TripStatus.pending, 
+                        ridePIN: generatedPin,
+                        driverEnd: false,
+                        commuterEnd: false,
+                        eta: null,
+                        scheduledTime: null,
                       );
+
+                      // 4. Send it to Firestore via the Controller
+                      try {
+                        await ref.read(tripControllerProvider.notifier).requestRide(newTrip);
+
+                        // 5. If successful, navigate to the waiting screen with ALL data
+                        if (mounted) {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => WaitingForDriverScreen(
+                                tripID: uniqueTripId,
+                                dropoffPoint: widget.dropoffPoint,
+                                pickupPoint: widget.pickupPoint,
+                              ),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Failed to request ride: $e'), backgroundColor: Colors.red),
+                          );
+                        }
+                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF66D2A3),
                       foregroundColor: Colors.black,
-                      minimumSize: const Size.fromHeight(56), // Standardized height
+                      minimumSize: const Size.fromHeight(56),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       elevation: 0,
                     ),

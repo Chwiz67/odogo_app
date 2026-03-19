@@ -7,11 +7,9 @@ import 'package:odogo_app/models/user_model.dart';
 import 'package:odogo_app/models/vehicle_model.dart';
 import 'package:odogo_app/repositories/user_repository.dart';
 //import 'package:odogo_app/services/phone_auth_service.dart';
+// import 'package:odogo_app/services/phone_auth_service.dart';
 import 'package:odogo_app/services/storage_service.dart';
 import 'auth_controller.dart'; // To get the current user's ID
-
-// 1. A provider to easily access the repository
-final userRepositoryProvider = Provider((ref) => UserRepository());
 
 // 2. A StreamProvider that constantly watches the logged-in user's document.
 // If the database changes (e.g., they register a vehicle), the UI updates instantly.
@@ -35,7 +33,7 @@ class UserController extends Notifier<AsyncValue<void>> {
   }
 
   UserRepository get _repository => ref.read(userRepositoryProvider);
-  //  SmsOtpAuthService get _phoneService => SmsOtpAuthService.instance;
+  // SmsOtpAuthService get _phoneService => SmsOtpAuthService.instance;
 
   /// A generic helper to get the current UID safely
   String _getUid() {
