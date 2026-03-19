@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../services/email_link_auth_service.dart';
-import 'profile_otp_verification_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class EmailEditScreen extends StatefulWidget {
   const EmailEditScreen({super.key});
@@ -11,90 +11,60 @@ class EmailEditScreen extends StatefulWidget {
 
 class _EmailEditScreenState extends State<EmailEditScreen> {
   final TextEditingController _controller = TextEditingController();
-  bool _isSendingOtp = false;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchEmailFromDatabase();
+  }
+
+  // The new function to pull the email from your database
+  Future<void> _fetchEmailFromDatabase() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+
+      if (user != null) {
+        // Option 1: Try pulling it directly from the Firestore 'users' collection
+        // (Assumes your document ID is the user's UID)
+        final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+
+        if (userDoc.exists && userDoc.data()!.containsKey('email')) {
+          setState(() {
+            _controller.text = userDoc.data()!['email'];
+            _isLoading = false;
+          });
+          return;
+        } 
+        
+        // Option 2: Fallback to the email stored directly in Firebase Auth
+        if (user.email != null && user.email!.isNotEmpty) {
+          setState(() {
+            _controller.text = user.email!;
+            _isLoading = false;
+          });
+          return;
+        }
+      }
+      
+      // If no email is found anywhere
+      setState(() {
+        _controller.text = "No email linked";
+        _isLoading = false;
+      });
+
+    } catch (e) {
+      setState(() {
+        _controller.text = "Error loading email";
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
-  }
-
-  // Helper function to keep the validation logic clean
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
-    );
-  }
-
-  Future<void> _saveEmail() async {
-    final email = _controller.text.trim();
-
-    // 1. Check if empty
-    if (email.isEmpty) {
-      _showError('Please enter an email address.');
-      return;
-    }
-
-    // 2. Check for accidental spaces
-    if (email.contains(' ')) {
-      _showError('Email cannot contain spaces.');
-      return;
-    }
-
-    // 3. Check for the @ symbol
-    if (!email.contains('@')) {
-      _showError('Email must contain an "@" symbol.');
-      return;
-    }
-
-    // 4. Strict check for allowed domains
-    if (!email.endsWith('.com') && !email.endsWith('.ac.in')) {
-      _showError('Email must end with .com or .ac.in');
-      return;
-    }
-
-    // 5. Final Regex check to ensure the prefix and domain format are structurally valid
-    final emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.(com|ac\.in)$');
-    if (!emailRegex.hasMatch(email)) {
-      _showError('Please enter a valid email format.');
-      return;
-    }
-
-    // If it passes all checks, hide the keyboard
-    FocusScope.of(context).unfocus();
-
-    setState(() {
-      _isSendingOtp = true;
-    });
-
-    try {
-      await EmailOtpAuthService.instance.sendOtp(email: email);
-    } catch (e) {
-      if (!mounted) return;
-      final message = e.toString().replaceFirst('Exception: ', '').trim();
-      _showError(message.isEmpty ? 'Could not send OTP. Please try again.' : message);
-      setState(() {
-        _isSendingOtp = false;
-      });
-      return;
-    }
-
-    if (!mounted) return;
-
-    setState(() {
-      _isSendingOtp = false;
-    });
-
-    // Push to the OTP screen and pass the securely validated email!
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ProfileOtpVerificationScreen(
-          contactInfo: email,
-          verificationEmail: email,
-        ),
-      ),
-    );
   }
 
   @override
@@ -137,36 +107,26 @@ class _EmailEditScreenState extends State<EmailEditScreen> {
                 ],
               ),
               const SizedBox(height: 40),
-              TextField(
-                controller: _controller,
-                keyboardType: TextInputType.emailAddress, 
-                decoration: InputDecoration(
-                  filled: true,
-                  fillColor: Colors.grey[200],
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                  hintText: 'email@example.com',
-                  hintStyle: TextStyle(color: Colors.grey[500]),
-                ),
-                style: const TextStyle(fontSize: 18),
-              ),
-              const SizedBox(height: 40),
               
-              ElevatedButton(
-                onPressed: _isSendingOtp ? null : _saveEmail,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF333333),
-                  minimumSize: const Size.fromHeight(56),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: Text(
-                  _isSendingOtp ? 'Sending OTP...' : 'Send OTP',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-              ),
+              // Show a loading spinner while fetching, then show the read-only TextField
+              _isLoading 
+                  ? const Center(child: CircularProgressIndicator(color: Color(0xFF66D2A3)))
+                  : TextField(
+                      controller: _controller,
+                      readOnly: true, // This locks the keyboard from opening
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: Colors.grey[200],
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      ),
+                      style: const TextStyle(fontSize: 18, color: Colors.black87),
+                    ),
+                    
+              // The Send OTP button has been completely removed!
             ],
           ),
         ),

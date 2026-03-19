@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'phone_number_edit_screen.dart';
 import 'gender_selection_screen.dart';
-// import 'email_edit_screen.dart';
+import 'email_edit_screen.dart';
 import 'edit_date_of_birth_screen.dart';
 
 // We use an underscore here (_BoundedBouncingScrollPhysics) to keep it private to this file
@@ -79,18 +79,18 @@ class PersonalDetailsScreen extends StatelessWidget {
                 ),
                 const Divider(height: 30, thickness: 1, color: Colors.black12),
                 
-                // _buildTile(
-                //   context, 
-                //   Icons.email_outlined, 
-                //   'Email',
-                //   onTap: () {
-                //     Navigator.push(
-                //       context,
-                //       MaterialPageRoute(builder: (context) => const EmailEditScreen()),
-                //     );
-                //   }
-                // ),
-                // const Divider(height: 30, thickness: 1, color: Colors.black12),
+                _buildTile(
+                  context, 
+                  Icons.email_outlined, 
+                  'Email',
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const EmailEditScreen()),
+                    );
+                  }
+                ),
+                const Divider(height: 30, thickness: 1, color: Colors.black12),
                 
                 _buildTile(
                   context, 
