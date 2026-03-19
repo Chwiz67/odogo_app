@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:odogo_app/controllers/trip_controller.dart';
 
-class TripEndRequestScreen extends StatelessWidget {
-  const TripEndRequestScreen({super.key});
+class TripEndRequestScreen extends ConsumerWidget {
+  final String tripID;
+
+  const TripEndRequestScreen({super.key, required this.tripID});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final activeTripAsync = ref.watch(activeTripStreamProvider(tripID));
+    final trip = activeTripAsync.value;
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -110,11 +116,20 @@ class TripEndRequestScreen extends StatelessWidget {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Trip Completed! Thank you for riding with OdoGo.')),
+                      onPressed: () async {
+                        await ref.read(tripControllerProvider.notifier).completeRide(
+                          tripID: tripID,
+                          isDriver: false, 
                         );
-                        Navigator.of(context).popUntil((route) => route.isFirst);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Trip Completed! Thank you for riding with OdoGo.'),
+                              backgroundColor: Color(0xFF66D2A3),
+                            ),
+                          );
+                          Navigator.of(context).popUntil((route) => route.isFirst);
+                        }
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF66D2A3),
@@ -145,16 +160,17 @@ class TripEndRequestScreen extends StatelessWidget {
                           child: Icon(Icons.person, color: Colors.white),
                         ),
                         const SizedBox(width: 12),
-                        const Expanded(
+                        Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Arman',
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87),
+                                // Simply use the new name field, with a safe fallback!
+                                trip?.driverName ?? '---', 
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87),
                               ),
-                              Text(
-                                'UP12WA9363',
+                              const Text(
+                                'Vehicle Details TBA', // Placeholder until you add vehicles to DB
                                 style: TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.w600),
                               ),
                             ],

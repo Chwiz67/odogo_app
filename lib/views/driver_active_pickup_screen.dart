@@ -305,6 +305,7 @@ class _DriverActivePickupScreenState extends ConsumerState<DriverActivePickupScr
         MaterialPageRoute(
           builder: (context) => DriverActiveTripScreen(
             pickupLocation: _pickupLocation,
+            tripID: trip.tripID,
           ),
         ),
       );

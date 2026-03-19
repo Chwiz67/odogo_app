@@ -1,25 +1,29 @@
 import 'dart:async';
 import 'dart:convert';
-
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
+import 'package:odogo_app/controllers/trip_controller.dart';
+import 'package:odogo_app/models/enums.dart';
 
-class DriverActiveTripScreen extends StatefulWidget {
+class DriverActiveTripScreen extends ConsumerStatefulWidget {
   final LatLng pickupLocation;
+  final String tripID;
 
   const DriverActiveTripScreen({
     super.key,
+    required this.tripID,
     this.pickupLocation = const LatLng(26.5140, 80.2340),
   });
 
   @override
-  State<DriverActiveTripScreen> createState() => _DriverActiveTripScreenState();
+  ConsumerState<DriverActiveTripScreen> createState() => _DriverActiveTripScreenState();
 }
 
-class _DriverActiveTripScreenState extends State<DriverActiveTripScreen> {
+class _DriverActiveTripScreenState extends ConsumerState<DriverActiveTripScreen> {
   static const LatLng _dropoffLocation = LatLng(26.5170, 80.2310);
   static const double _avgDriverSpeedMetersPerSecond = 4.5; // ~16.2 km/h
   static const double _minFitDistanceMeters = 5;
@@ -246,15 +250,21 @@ class _DriverActiveTripScreenState extends State<DriverActiveTripScreen> {
     );
   }
 
-  void _endTrip(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Trip Ended Successfully!'),
-        backgroundColor: Colors.green,
-      ),
+  Future<void> _endTrip(BuildContext context) async {
+    // 1. Tell the backend the DRIVER has ended the trip
+    await ref.read(tripControllerProvider.notifier).completeRide(
+      tripID: widget.tripID, 
+      isDriver: true,
     );
 
-    Navigator.popUntil(context, (route) => route.isFirst);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Trip Ended! Waiting for commuter confirmation...'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    }
   }
 
   @override
@@ -265,6 +275,17 @@ class _DriverActiveTripScreenState extends State<DriverActiveTripScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(activeTripStreamProvider(widget.tripID), (previous, next) {
+      final trip = next.value;
+      if (trip != null && trip.status == TripStatus.completed) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Trip Officially Completed!'), backgroundColor: Colors.green),
+          );
+          Navigator.popUntil(context, (route) => route.isFirst);
+        }
+      }
+    });
     final polylinePoints = _polylinePoints;
     _measureBottomCardHeight();
 
