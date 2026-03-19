@@ -1,64 +1,38 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'; // Added Riverpod
+import '../controllers/auth_controller.dart'; // Tapping into your auth controller
 
-class EmailEditScreen extends StatefulWidget {
+class EmailEditScreen extends ConsumerStatefulWidget {
   const EmailEditScreen({super.key});
 
   @override
-  State<EmailEditScreen> createState() => _EmailEditScreenState();
+  ConsumerState<EmailEditScreen> createState() => _EmailEditScreenState();
 }
 
-class _EmailEditScreenState extends State<EmailEditScreen> {
+class _EmailEditScreenState extends ConsumerState<EmailEditScreen> {
   final TextEditingController _controller = TextEditingController();
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _fetchEmailFromDatabase();
+    _loadEmail();
   }
 
-  // The new function to pull the email from your database
-  Future<void> _fetchEmailFromDatabase() async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
+  // The new Riverpod-powered fetch function
+  void _loadEmail() {
+    // Read the current user state directly from your provider
+    final activeUser = ref.read(currentUserProvider);
 
-      if (user != null) {
-        // Option 1: Try pulling it directly from the Firestore 'users' collection
-        // (Assumes your document ID is the user's UID)
-        final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-
-        if (userDoc.exists && userDoc.data()!.containsKey('email')) {
-          setState(() {
-            _controller.text = userDoc.data()!['email'];
-            _isLoading = false;
-          });
-          return;
-        } 
-        
-        // Option 2: Fallback to the email stored directly in Firebase Auth
-        if (user.email != null && user.email!.isNotEmpty) {
-          setState(() {
-            _controller.text = user.email!;
-            _isLoading = false;
-          });
-          return;
-        }
-      }
-      
-      // If no email is found anywhere
-      setState(() {
+    setState(() {
+      // Use the exact same emailID property from your SwitchAccountScreen logic
+      if (activeUser != null && activeUser.emailID != null && activeUser.emailID!.isNotEmpty) {
+        _controller.text = activeUser.emailID!;
+      } else {
         _controller.text = "No email linked";
-        _isLoading = false;
-      });
-
-    } catch (e) {
-      setState(() {
-        _controller.text = "Error loading email";
-        _isLoading = false;
-      });
-    }
+      }
+      _isLoading = false;
+    });
   }
 
   @override
@@ -108,12 +82,12 @@ class _EmailEditScreenState extends State<EmailEditScreen> {
               ),
               const SizedBox(height: 40),
               
-              // Show a loading spinner while fetching, then show the read-only TextField
+              // Loading state or the Read-Only TextField
               _isLoading 
                   ? const Center(child: CircularProgressIndicator(color: Color(0xFF66D2A3)))
                   : TextField(
                       controller: _controller,
-                      readOnly: true, // This locks the keyboard from opening
+                      readOnly: true, // Prevents typing and locks the keyboard
                       decoration: InputDecoration(
                         filled: true,
                         fillColor: Colors.grey[200],
@@ -125,8 +99,6 @@ class _EmailEditScreenState extends State<EmailEditScreen> {
                       ),
                       style: const TextStyle(fontSize: 18, color: Colors.black87),
                     ),
-                    
-              // The Send OTP button has been completely removed!
             ],
           ),
         ),
