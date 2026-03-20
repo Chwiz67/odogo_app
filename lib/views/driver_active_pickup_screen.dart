@@ -19,16 +19,19 @@ import 'package:odogo_app/services/contact_launcher_service.dart';
 import 'package:odogo_app/views/driver_home_screen.dart';
 import 'driver_active_trip_screen.dart';
 import 'driver_cancel_confirmation_screen.dart';
+import '../services/notification_permission_service.dart';
 
 class DriverActivePickupScreen extends ConsumerStatefulWidget {
   final String tripID;
   const DriverActivePickupScreen({super.key, required this.tripID});
 
   @override
-  ConsumerState<DriverActivePickupScreen> createState() => _DriverActivePickupScreenState();
+  ConsumerState<DriverActivePickupScreen> createState() =>
+      _DriverActivePickupScreenState();
 }
 
-class _DriverActivePickupScreenState extends ConsumerState<DriverActivePickupScreen> {
+class _DriverActivePickupScreenState
+    extends ConsumerState<DriverActivePickupScreen> {
   final Color odogoGreen = const Color(0xFF66D2A3);
   final Color etaOrange = const Color(0xFFEC5B13);
   static const LatLng _fallbackDriverLocation = LatLng(26.5100, 80.2300);
@@ -49,7 +52,10 @@ class _DriverActivePickupScreenState extends ConsumerState<DriverActivePickupScr
 
   // Focus nodes for the 4 PIN boxes
   final List<FocusNode> _focusNodes = List.generate(4, (index) => FocusNode());
-  final List<TextEditingController> _controllers = List.generate(4, (index) => TextEditingController());
+  final List<TextEditingController> _controllers = List.generate(
+    4,
+    (index) => TextEditingController(),
+  );
 
   @override
   void initState() {
@@ -87,14 +93,16 @@ class _DriverActivePickupScreenState extends ConsumerState<DriverActivePickupScr
     final driverID = ref.read(currentUserProvider)?.userID;
     if (driverID == null || driverID.isEmpty) return;
 
-    await ref.read(telemetryControllerProvider).broadcastLocation(
-      DriverTelemetry(
-        driverID: driverID,
-        latitude: location.latitude,
-        longitude: location.longitude,
-        timestampMs: DateTime.now().millisecondsSinceEpoch,
-      ),
-    );
+    await ref
+        .read(telemetryControllerProvider)
+        .broadcastLocation(
+          DriverTelemetry(
+            driverID: driverID,
+            latitude: location.latitude,
+            longitude: location.longitude,
+            timestampMs: DateTime.now().millisecondsSinceEpoch,
+          ),
+        );
   }
 
   void _syncPickupFromTrip(TripModel? trip) {
@@ -104,7 +112,8 @@ class _DriverActivePickupScreenState extends ConsumerState<DriverActivePickupScr
     if (mappedPickup == null) return;
 
     final nextPickup = LatLng(mappedPickup.latitude, mappedPickup.longitude);
-    final hasChanged = Geolocator.distanceBetween(
+    final hasChanged =
+        Geolocator.distanceBetween(
           _pickupLocation.latitude,
           _pickupLocation.longitude,
           nextPickup.latitude,
@@ -151,14 +160,13 @@ class _DriverActivePickupScreenState extends ConsumerState<DriverActivePickupScr
       distanceFilter: 3,
     );
 
-    _driverLocationSubscription = Geolocator.getPositionStream(
-      locationSettings: locationSettings,
-    ).listen(
-      (position) => _applyDriverLocationUpdate(
-        LatLng(position.latitude, position.longitude),
-      ),
-      onError: (_) {},
-    );
+    _driverLocationSubscription =
+        Geolocator.getPositionStream(locationSettings: locationSettings).listen(
+          (position) => _applyDriverLocationUpdate(
+            LatLng(position.latitude, position.longitude),
+          ),
+          onError: (_) {},
+        );
   }
 
   void _applyDriverLocationUpdate(LatLng location) {
@@ -169,7 +177,8 @@ class _DriverActivePickupScreenState extends ConsumerState<DriverActivePickupScr
     });
     _broadcastDriverTelemetry(location);
 
-    final shouldRefreshRoute = _lastRouteOrigin == null ||
+    final shouldRefreshRoute =
+        _lastRouteOrigin == null ||
         Geolocator.distanceBetween(
               _lastRouteOrigin!.latitude,
               _lastRouteOrigin!.longitude,
@@ -266,7 +275,8 @@ class _DriverActivePickupScreenState extends ConsumerState<DriverActivePickupScr
       _pickupLocation.longitude,
     );
 
-    final etaMinutes = (distanceMeters / _avgDriverSpeedMetersPerSecond / 60).ceil();
+    final etaMinutes = (distanceMeters / _avgDriverSpeedMetersPerSecond / 60)
+        .ceil();
     return etaMinutes < 1 ? 1 : etaMinutes;
   }
 
@@ -315,8 +325,18 @@ class _DriverActivePickupScreenState extends ConsumerState<DriverActivePickupScr
     if (driverID != null && driverID.isNotEmpty) {
       ref.read(telemetryControllerProvider).stopBroadcasting(driverID);
     }
-    for (var node in _focusNodes) { node.dispose(); }
-    for (var controller in _controllers) { controller.dispose(); }
+    for (var node in _focusNodes) {
+      node.dispose();
+    }
+    for (var controller in _controllers) {
+      controller.dispose();
+    }
+    for (var node in _focusNodes) {
+      node.dispose();
+    }
+    for (var controller in _controllers) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -326,7 +346,7 @@ class _DriverActivePickupScreenState extends ConsumerState<DriverActivePickupScr
     if (trip == null) return;
 
     String enteredPin = _controllers.map((c) => c.text).join();
-    
+
     // 2. Compare the entered PIN to the database PIN
     if (enteredPin == trip.ridePIN) {
       FocusScope.of(context).unfocus();
@@ -344,14 +364,23 @@ class _DriverActivePickupScreenState extends ConsumerState<DriverActivePickupScr
       );
     } else if (enteredPin.length < 4) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter the full 4-digit PIN.'), backgroundColor: Colors.orange),
+        const SnackBar(
+          content: Text('Please enter the full 4-digit PIN.'),
+          backgroundColor: Colors.orange,
+        ),
       );
-    } else {  // Wrong PIN
+    } else {
+      // Wrong PIN
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Incorrect PIN. Please try again.'), backgroundColor: Colors.red),
+        const SnackBar(
+          content: Text('Incorrect PIN. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
       );
       // Automatically clear the boxes so they can try again
-      for (var controller in _controllers) { controller.clear(); }
+      for (var controller in _controllers) {
+        controller.clear();
+      }
       FocusScope.of(context).requestFocus(_focusNodes[0]);
     }
   }
@@ -360,14 +389,15 @@ class _DriverActivePickupScreenState extends ConsumerState<DriverActivePickupScr
   void _cancelTrip() {
     // Hide the keyboard just in case it's open
     FocusScope.of(context).unfocus();
-    
-    // Push to the confirmation screen. 
+
+    // Push to the confirmation screen.
     // If they hit 'No' on that screen (Navigator.pop), they will come right back here.
     Navigator.push(
       context,
       MaterialPageRoute(
         // Pass the tripID so the confirmation screen knows WHICH trip to cancel!
-        builder: (context) => DriverCancelConfirmationScreen(tripID: widget.tripID), 
+        builder: (context) =>
+            DriverCancelConfirmationScreen(tripID: widget.tripID),
       ),
     );
   }
@@ -378,10 +408,15 @@ class _DriverActivePickupScreenState extends ConsumerState<DriverActivePickupScr
     final activeTripAsync = ref.watch(activeTripStreamProvider(widget.tripID));
     final trip = activeTripAsync.value;
     _syncPickupFromTrip(trip);
-    final commuterInfoAsync = ref.watch(userInfoProvider(trip?.commuterID ?? ''));
+    final commuterInfoAsync = ref.watch(
+      userInfoProvider(trip?.commuterID ?? ''),
+    );
     final commuterPhone = commuterInfoAsync.value?.phoneNo;
 
-    ref.listen<AsyncValue<TripModel?>>(activeTripStreamProvider(widget.tripID), (previous, next) {
+    // ref.listen must be used in build in ConsumerStatefulWidget
+    ref.listen<
+      AsyncValue<TripModel?>
+    >(activeTripStreamProvider(widget.tripID), (previous, next) {
       final currentTrip = next.value;
       final prevTrip = previous?.value;
 
@@ -389,6 +424,10 @@ class _DriverActivePickupScreenState extends ConsumerState<DriverActivePickupScr
           currentTrip.status == TripStatus.cancelled &&
           prevTrip?.status != TripStatus.cancelled) {
         if (mounted) {
+          NotificationService().showNotification(
+            title: 'Ride Cancelled',
+            body: 'The commuter cancelled the ride.',
+          );
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Ride cancelled by commuter'),
@@ -400,9 +439,11 @@ class _DriverActivePickupScreenState extends ConsumerState<DriverActivePickupScr
             Navigator.pushAndRemoveUntil(
               context,
               MaterialPageRoute(
-                builder: (context) => const DriverHomeScreen(), // Make sure this matches your home screen import
+                builder: (context) =>
+                    const DriverHomeScreen(), // Make sure this matches your home screen import
               ),
-              (route) => false, // This destroys the dead trip screen so they can't swipe back to it
+              (route) =>
+                  false, // This destroys the dead trip screen so they can't swipe back to it
             );
           });
         }
@@ -437,10 +478,26 @@ class _DriverActivePickupScreenState extends ConsumerState<DriverActivePickupScr
                   tileBuilder: (context, tileWidget, tile) {
                     return ColorFiltered(
                       colorFilter: const ColorFilter.matrix([
-                        -0.2126, -0.7152, -0.0722, 0, 255,
-                        -0.2126, -0.7152, -0.0722, 0, 255,
-                        -0.2126, -0.7152, -0.0722, 0, 255,
-                        0,       0,       0,       1, 0,
+                        -0.2126,
+                        -0.7152,
+                        -0.0722,
+                        0,
+                        255,
+                        -0.2126,
+                        -0.7152,
+                        -0.0722,
+                        0,
+                        255,
+                        -0.2126,
+                        -0.7152,
+                        -0.0722,
+                        0,
+                        255,
+                        0,
+                        0,
+                        0,
+                        1,
+                        0,
                       ]),
                       child: tileWidget,
                     );
@@ -462,37 +519,60 @@ class _DriverActivePickupScreenState extends ConsumerState<DriverActivePickupScr
                     // Driver Location
                     Marker(
                       point: _driverLocation,
-                      width: 56, height: 56,
+                      width: 56,
+                      height: 56,
                       child: Container(
-                        decoration: BoxDecoration(color: odogoGreen, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
+                        decoration: BoxDecoration(
+                          color: odogoGreen,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
                         child: Padding(
                           padding: const EdgeInsets.all(4.0),
-                          child: ClipOval(child: Image.asset('assets/images/odogo_logo_black_bg.jpeg', fit: BoxFit.contain)),
+                          child: ClipOval(
+                            child: Image.asset(
+                              'assets/images/odogo_logo_black_bg.jpeg',
+                              fit: BoxFit.contain,
+                            ),
+                          ),
                         ),
                       ),
                     ),
                     // Pickup Location
                     Marker(
                       point: _pickupLocation,
-                      width: 40, height: 40,
-                      child: const Icon(Icons.location_on, color: Colors.white, size: 40),
+                      width: 40,
+                      height: 40,
+                      child: const Icon(
+                        Icons.location_on,
+                        color: Colors.white,
+                        size: 40,
+                      ),
                     ),
                   ],
                 ),
               ],
             ),
           ),
-          
+
           // 2. Bottom UI Card
           Positioned(
-            bottom: 0, left: 0, right: 0,
+            bottom: 0,
+            left: 0,
+            right: 0,
             child: Container(
               key: _bottomCardKey,
               padding: const EdgeInsets.all(24),
               decoration: const BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(40)),
-                boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 20, offset: Offset(0, -5))],
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black54,
+                    blurRadius: 20,
+                    offset: Offset(0, -5),
+                  ),
+                ],
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -504,73 +584,143 @@ class _DriverActivePickupScreenState extends ConsumerState<DriverActivePickupScr
                       const Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('You have confirmed the ride', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black)),
+                          Text(
+                            'You have confirmed the ride',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                              color: Colors.black,
+                            ),
+                          ),
                           SizedBox(height: 4),
-                          Text('Meet at the pickup point', style: TextStyle(color: Colors.grey, fontSize: 14)),
+                          Text(
+                            'Meet at the pickup point',
+                            style: TextStyle(color: Colors.grey, fontSize: 14),
+                          ),
                         ],
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(color: odogoGreen.withOpacity(0.2), borderRadius: BorderRadius.circular(20)),
-                        child: Text('$_etaMinutesToPickup mins', style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: odogoGreen.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '$_etaMinutesToPickup mins',
+                          style: TextStyle(
+                            color: Colors.green.shade700,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 20),
-                  
+
                   // PIN Input Section
                   Container(
                     padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(16)),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('ENTER PIN', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey[500], letterSpacing: 1.5)),
+                        Text(
+                          'ENTER PIN',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.grey[500],
+                            letterSpacing: 1.5,
+                          ),
+                        ),
                         const SizedBox(height: 12),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: List.generate(4, (index) => _buildPinBox(index)),
+                          children: List.generate(
+                            4,
+                            (index) => _buildPinBox(index),
+                          ),
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 20),
-                  
+
                   // Passenger Details Row
                   Row(
                     children: [
-                      CircleAvatar(backgroundColor: Colors.grey[300], child: const Icon(Icons.person, color: Colors.grey)),
+                      CircleAvatar(
+                        backgroundColor: Colors.grey[300],
+                        child: const Icon(Icons.person, color: Colors.grey),
+                      ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(trip?.commuterName ?? '---', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black, fontSize: 16)),
+                            Text(
+                              trip?.commuterName ?? '---',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black,
+                                fontSize: 16,
+                              ),
+                            ),
                             SizedBox(height: 4),
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                              Icon(Icons.location_on, size: 14, color: Colors.grey),
-                              const SizedBox(width: 4),
-                              Expanded(
-                                child: Text('Pickup: ${trip?.startLocName ?? '---'}', style: TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.w600)),
-                              )
-                            ]),
+                                Icon(
+                                  Icons.location_on,
+                                  size: 14,
+                                  color: Colors.grey,
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    'Pickup: ${trip?.startLocName ?? '---'}',
+                                    style: TextStyle(
+                                      color: Colors.grey,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ],
                         ),
                       ),
                       IconButton(
-                        icon: Icon(Icons.phone_in_talk, color: Colors.grey[700]),
-                        onPressed: () => ContactLauncherService.callNumber(context, commuterPhone),
+                        icon: Icon(
+                          Icons.phone_in_talk,
+                          color: Colors.grey[700],
+                        ),
+                        onPressed: () => ContactLauncherService.callNumber(
+                          context,
+                          commuterPhone,
+                        ),
                       ),
                       IconButton(
-                        icon: Icon(Icons.chat_bubble_outline, color: Colors.grey[700]),
-                        onPressed: () => ContactLauncherService.smsNumber(context, commuterPhone),
+                        icon: Icon(
+                          Icons.chat_bubble_outline,
+                          color: Colors.grey[700],
+                        ),
+                        onPressed: () => ContactLauncherService.smsNumber(
+                          context,
+                          commuterPhone,
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 20),
-                  
+
                   // Action Buttons
                   Row(
                     children: [
@@ -578,11 +728,19 @@ class _DriverActivePickupScreenState extends ConsumerState<DriverActivePickupScr
                         child: OutlinedButton(
                           style: OutlinedButton.styleFrom(
                             side: const BorderSide(color: Colors.red, width: 2),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                             padding: const EdgeInsets.symmetric(vertical: 16),
                           ),
-                          onPressed: _cancelTrip, 
-                          child: const Text('Cancel Trip', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                          onPressed: _cancelTrip,
+                          child: const Text(
+                            'Cancel Trip',
+                            style: TextStyle(
+                              color: Colors.red,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -591,16 +749,21 @@ class _DriverActivePickupScreenState extends ConsumerState<DriverActivePickupScr
                           style: ElevatedButton.styleFrom(
                             backgroundColor: odogoGreen,
                             foregroundColor: Colors.black,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             elevation: 0,
                           ),
                           onPressed: _verifyPinAndStartTrip,
-                          child: const Text('Start Trip', style: TextStyle(fontWeight: FontWeight.bold)),
+                          child: const Text(
+                            'Start Trip',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
                         ),
                       ),
                     ],
-                  )
+                  ),
                 ],
               ),
             ),
@@ -613,8 +776,13 @@ class _DriverActivePickupScreenState extends ConsumerState<DriverActivePickupScr
   // Helper widget to build functional PIN boxes
   Widget _buildPinBox(int index) {
     return Container(
-      width: 55, height: 65,
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade300, width: 2)),
+      width: 55,
+      height: 65,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade300, width: 2),
+      ),
       child: Center(
         child: TextField(
           controller: _controllers[index],
@@ -623,13 +791,18 @@ class _DriverActivePickupScreenState extends ConsumerState<DriverActivePickupScr
           keyboardType: TextInputType.number,
           style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           inputFormatters: [LengthLimitingTextInputFormatter(1)],
-          decoration: const InputDecoration(border: InputBorder.none, counterText: ''),
+          decoration: const InputDecoration(
+            border: InputBorder.none,
+            counterText: '',
+          ),
           onChanged: (value) {
             if (value.isNotEmpty) {
               if (index < 3) {
                 FocusScope.of(context).requestFocus(_focusNodes[index + 1]);
               } else {
-                FocusScope.of(context).unfocus(); // Close keyboard on last digit
+                FocusScope.of(
+                  context,
+                ).unfocus(); // Close keyboard on last digit
               }
             } else if (value.isEmpty && index > 0) {
               FocusScope.of(context).requestFocus(_focusNodes[index - 1]);

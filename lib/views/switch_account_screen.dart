@@ -174,6 +174,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart'; // Added Riverpod
 import '../controllers/auth_controller.dart'; // Adjust path
 import 'logout_warning_screen.dart';
+import 'package:go_router/go_router.dart';
+import '../models/enums.dart';
 
 // Upgraded to ConsumerStatefulWidget
 class SwitchAccountScreen extends ConsumerStatefulWidget {
@@ -226,8 +228,13 @@ class _SwitchAccountScreenState extends ConsumerState<SwitchAccountScreen> {
       ),
     );
 
-    // Return to the Profile Page
-    Navigator.pop(context);
+    final updatedUser = ref.read(currentUserProvider);
+
+    if (updatedUser?.role == UserRole.driver) {
+      context.go('/driver-home');
+    } else {
+      context.go('/commuter-home');
+    }
   }
 
   void _createNewAccount() {

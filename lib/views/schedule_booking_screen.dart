@@ -328,8 +328,27 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
   bool _isLoading = false;
 
   final TextEditingController _pickupController = TextEditingController();
-
   final TextEditingController _dropoffController = TextEditingController();
+
+  bool get _isSameLocation {
+    final pickup = _pickupController.text.trim();
+    final dropoff = _dropoffController.text.trim();
+    return pickup.isNotEmpty && dropoff.isNotEmpty && pickup == dropoff;
+  }
+
+  bool get _isTimeInvalid {
+    if (_selectedDate == null || _selectedTime == null) return false;
+    final scheduledDateTime = DateTime(
+      _selectedDate!.year,
+      _selectedDate!.month,
+      _selectedDate!.day,
+      _selectedTime!.hour,
+      _selectedTime!.minute,
+    );
+    // Must be at least 20 mins from right now
+    final minAllowedTime = DateTime.now().add(const Duration(minutes: 20));
+    return scheduledDateTime.isBefore(minAllowedTime);
+  }
 
   Future<void> _pickDate() async {
     final DateTime? picked = await showDatePicker(
@@ -589,7 +608,10 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
                             child: Center(
                               child: Text(
                                 'No locations found matching "$localSearchText"',
-                                style: const TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+                                style: const TextStyle(
+                                  color: Colors.grey,
+                                  fontStyle: FontStyle.italic,
+                                ),
                               ),
                             ),
                           ),
@@ -671,6 +693,25 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
         ),
       );
 
+      return;
+    }
+
+    if (_isSameLocation) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Pickup and Dropoff cannot be the same.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    if (_isTimeInvalid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Scheduled time must be at least 20 minutes from now.'),
+          backgroundColor: Colors.red,
+        ),
+      );
       return;
     }
 

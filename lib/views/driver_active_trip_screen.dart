@@ -14,6 +14,7 @@ import 'package:odogo_app/models/driver_telemetry_model.dart';
 import 'package:odogo_app/models/enums.dart';
 import 'package:odogo_app/models/trip_model.dart';
 import 'package:odogo_app/services/contact_launcher_service.dart';
+import 'package:odogo_app/services/notification_permission_service.dart';
 import 'package:odogo_app/views/driver_home_screen.dart';
 
 class DriverActiveTripScreen extends ConsumerStatefulWidget {
@@ -27,10 +28,12 @@ class DriverActiveTripScreen extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<DriverActiveTripScreen> createState() => _DriverActiveTripScreenState();
+  ConsumerState<DriverActiveTripScreen> createState() =>
+      _DriverActiveTripScreenState();
 }
 
-class _DriverActiveTripScreenState extends ConsumerState<DriverActiveTripScreen> {
+class _DriverActiveTripScreenState
+    extends ConsumerState<DriverActiveTripScreen> {
   static const LatLng _fallbackDropoffLocation = LatLng(26.5170, 80.2310);
   static const double _avgDriverSpeedMetersPerSecond = 4.5; // ~16.2 km/h
   static const double _minFitDistanceMeters = 5;
@@ -73,7 +76,8 @@ class _DriverActiveTripScreenState extends ConsumerState<DriverActiveTripScreen>
     if (mappedDropoff == null) return;
 
     final nextDropoff = LatLng(mappedDropoff.latitude, mappedDropoff.longitude);
-    final hasChanged = Geolocator.distanceBetween(
+    final hasChanged =
+        Geolocator.distanceBetween(
           _dropoffLocation.latitude,
           _dropoffLocation.longitude,
           nextDropoff.latitude,
@@ -118,14 +122,16 @@ class _DriverActiveTripScreenState extends ConsumerState<DriverActiveTripScreen>
     final driverID = ref.read(currentUserProvider)?.userID;
     if (driverID == null || driverID.isEmpty) return;
 
-    await ref.read(telemetryControllerProvider).broadcastLocation(
-      DriverTelemetry(
-        driverID: driverID,
-        latitude: location.latitude,
-        longitude: location.longitude,
-        timestampMs: DateTime.now().millisecondsSinceEpoch,
-      ),
-    );
+    await ref
+        .read(telemetryControllerProvider)
+        .broadcastLocation(
+          DriverTelemetry(
+            driverID: driverID,
+            latitude: location.latitude,
+            longitude: location.longitude,
+            timestampMs: DateTime.now().millisecondsSinceEpoch,
+          ),
+        );
   }
 
   Future<bool> _ensureLocationPermission() async {
@@ -154,14 +160,13 @@ class _DriverActiveTripScreenState extends ConsumerState<DriverActiveTripScreen>
       distanceFilter: 3,
     );
 
-    _driverLocationSubscription = Geolocator.getPositionStream(
-      locationSettings: locationSettings,
-    ).listen(
-      (position) => _applyDriverLocationUpdate(
-        LatLng(position.latitude, position.longitude),
-      ),
-      onError: (_) {},
-    );
+    _driverLocationSubscription =
+        Geolocator.getPositionStream(locationSettings: locationSettings).listen(
+          (position) => _applyDriverLocationUpdate(
+            LatLng(position.latitude, position.longitude),
+          ),
+          onError: (_) {},
+        );
   }
 
   void _applyDriverLocationUpdate(LatLng location) {
@@ -172,7 +177,8 @@ class _DriverActiveTripScreenState extends ConsumerState<DriverActiveTripScreen>
     });
     _broadcastDriverTelemetry(location);
 
-    final shouldRefreshRoute = _lastRouteOrigin == null ||
+    final shouldRefreshRoute =
+        _lastRouteOrigin == null ||
         Geolocator.distanceBetween(
               _lastRouteOrigin!.latitude,
               _lastRouteOrigin!.longitude,
@@ -247,7 +253,8 @@ class _DriverActiveTripScreenState extends ConsumerState<DriverActiveTripScreen>
       _dropoffLocation.longitude,
     );
 
-    final etaMinutes = (distanceMeters / _avgDriverSpeedMetersPerSecond / 60).ceil();
+    final etaMinutes = (distanceMeters / _avgDriverSpeedMetersPerSecond / 60)
+        .ceil();
     return etaMinutes < 1 ? 1 : etaMinutes;
   }
 
@@ -311,10 +318,9 @@ class _DriverActiveTripScreenState extends ConsumerState<DriverActiveTripScreen>
 
   Future<void> _endTrip(BuildContext context) async {
     // 1. Tell the backend the DRIVER has ended the trip
-    await ref.read(tripControllerProvider.notifier).completeRide(
-      tripID: widget.tripID, 
-      isDriver: true,
-    );
+    await ref
+        .read(tripControllerProvider.notifier)
+        .completeRide(tripID: widget.tripID, isDriver: true);
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -342,15 +348,24 @@ class _DriverActiveTripScreenState extends ConsumerState<DriverActiveTripScreen>
       final trip = next.value;
       if (trip != null && trip.status == TripStatus.completed) {
         if (context.mounted) {
+          NotificationService().showNotification(
+            title: 'Trip Completed',
+            body: 'The commuter confirmed the drop-off. You are back online!',
+          );
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Trip Officially Completed!'), backgroundColor: Colors.green),
+            const SnackBar(
+              content: Text('Trip Officially Completed!'),
+              backgroundColor: Colors.green,
+            ),
           );
           Navigator.pushAndRemoveUntil(
             context,
             MaterialPageRoute(
-              builder: (context) => const DriverHomeScreen(), // Make sure this matches your home screen's exact name
+              builder: (context) =>
+                  const DriverHomeScreen(), // Make sure this matches your home screen's exact name
             ),
-            (route) => false, // This "false" is what destroys the old route history
+            (route) =>
+                false, // This "false" is what destroys the old route history
           );
         }
       }
@@ -358,7 +373,9 @@ class _DriverActiveTripScreenState extends ConsumerState<DriverActiveTripScreen>
     final activeTripAsync = ref.watch(activeTripStreamProvider(widget.tripID));
     final trip = activeTripAsync.value;
     _syncDropoffFromTrip(trip);
-    final commuterInfoAsync = ref.watch(userInfoProvider(trip?.commuterID ?? ''));
+    final commuterInfoAsync = ref.watch(
+      userInfoProvider(trip?.commuterID ?? ''),
+    );
     final commuterPhone = commuterInfoAsync.value?.phoneNo;
     final polylinePoints = _polylinePoints;
     _measureBottomCardHeight();
@@ -387,10 +404,26 @@ class _DriverActiveTripScreenState extends ConsumerState<DriverActiveTripScreen>
                   tileBuilder: (context, tileWidget, tile) {
                     return ColorFiltered(
                       colorFilter: const ColorFilter.matrix([
-                        -0.2126, -0.7152, -0.0722, 0, 255,
-                        -0.2126, -0.7152, -0.0722, 0, 255,
-                        -0.2126, -0.7152, -0.0722, 0, 255,
-                        0,       0,       0,       1, 0,
+                        -0.2126,
+                        -0.7152,
+                        -0.0722,
+                        0,
+                        255,
+                        -0.2126,
+                        -0.7152,
+                        -0.0722,
+                        0,
+                        255,
+                        -0.2126,
+                        -0.7152,
+                        -0.0722,
+                        0,
+                        255,
+                        0,
+                        0,
+                        0,
+                        1,
+                        0,
                       ]),
                       child: tileWidget,
                     );
@@ -503,7 +536,11 @@ class _DriverActiveTripScreenState extends ConsumerState<DriverActiveTripScreen>
                           color: Colors.red.withOpacity(0.1),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.location_on, color: Colors.red, size: 24),
+                        child: const Icon(
+                          Icons.location_on,
+                          color: Colors.red,
+                          size: 24,
+                        ),
                       ),
                       const SizedBox(width: 16),
                       Expanded(
@@ -512,18 +549,28 @@ class _DriverActiveTripScreenState extends ConsumerState<DriverActiveTripScreen>
                           children: [
                             Text(
                               trip?.endLocName ?? '---',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
                             ),
                             const Text(
                               'IIT Kanpur Campus',
-                              style: TextStyle(color: Colors.grey, fontSize: 13),
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontSize: 13,
+                              ),
                             ),
                           ],
                         ),
                       ),
                     ],
                   ),
-                  const Divider(height: 32, thickness: 1, color: Colors.black12),
+                  const Divider(
+                    height: 32,
+                    thickness: 1,
+                    color: Colors.black12,
+                  ),
                   Row(
                     children: [
                       CircleAvatar(
@@ -542,12 +589,24 @@ class _DriverActiveTripScreenState extends ConsumerState<DriverActiveTripScreen>
                         ),
                       ),
                       IconButton(
-                        icon: Icon(Icons.phone_in_talk, color: Colors.grey[700]),
-                        onPressed: () => ContactLauncherService.callNumber(context, commuterPhone),
+                        icon: Icon(
+                          Icons.phone_in_talk,
+                          color: Colors.grey[700],
+                        ),
+                        onPressed: () => ContactLauncherService.callNumber(
+                          context,
+                          commuterPhone,
+                        ),
                       ),
                       IconButton(
-                        icon: Icon(Icons.chat_bubble_outline, color: Colors.grey[700]),
-                        onPressed: () => ContactLauncherService.smsNumber(context, commuterPhone),
+                        icon: Icon(
+                          Icons.chat_bubble_outline,
+                          color: Colors.grey[700],
+                        ),
+                        onPressed: () => ContactLauncherService.smsNumber(
+                          context,
+                          commuterPhone,
+                        ),
                       ),
                     ],
                   ),

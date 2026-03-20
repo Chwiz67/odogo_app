@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:odogo_app/models/enums.dart';
+import 'package:odogo_app/views/ride_confirmed_screen.dart';
 import '../controllers/auth_controller.dart';
 import '../data/iitk_dropoff_locations.dart';
 import 'bookings_screen.dart';
@@ -12,7 +13,6 @@ import 'profile_screen.dart';
 import 'trip_confirmation_screen.dart';
 import 'schedule_booking_screen.dart';
 import 'location_permission_screen.dart';
-import 'waiting_for_driver_screen.dart'; // Add this near the top imports!
 import '../services/notification_permission_service.dart';
 import '../controllers/trip_controller.dart';
 
@@ -59,7 +59,7 @@ class _CommuterHomeScreenState extends ConsumerState<CommuterHomeScreen> {
       }
     });
 
-    // 2. Listen for the exact moment Scheduled -> Confirmed happens
+    // 2. Listen for the exact moment a trip changes status
     ref.listen(commuterTripsProvider, (previous, next) {
       final previousTrips = previous?.value ?? [];
       final nextTrips = next.value ?? [];
@@ -70,36 +70,86 @@ class _CommuterHomeScreenState extends ConsumerState<CommuterHomeScreen> {
           orElse: () => newTrip,
         );
 
+        // A. Scheduled Ride hits t=0
         if (oldTrip.status == TripStatus.scheduled &&
             newTrip.status == TripStatus.confirmed) {
-          // A. Show the in-app Snackbar
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
                 'Your Scheduled Ride is starting NOW! The driver is on the way.',
               ),
               backgroundColor: Color(0xFF66D2A3),
-              duration: Duration(seconds: 4),
             ),
           );
           NotificationService().showNotification(
-            title: 'OdoGo Alert',
-            body: 'Your Scheduled Ride is starting NOW!',
+            title: 'Scheduled Ride Alert',
+            body:
+                'Your Scheduled Ride is starting NOW!. PIN: ${newTrip.ridePIN}',
           );
-          // B. Trigger Native Phone Notification (Requires flutter_local_notifications package)
 
-          // C. Auto-route to the active ride screen after a brief delay
+          LatLng? resolvedPickup;
+          LatLng? resolvedDropoff;
+
+          try {
+            // Find the matching pickup coordinate from your IITK data
+            final pLoc = iitkDropoffLocations.firstWhere(
+              (loc) =>
+                  loc.name.toLowerCase() ==
+                  newTrip.startLocName.replaceAll('Near ', '').toLowerCase(),
+            );
+            resolvedPickup = LatLng(pLoc.latitude, pLoc.longitude);
+          } catch (_) {} // If not found, leaves it as null
+
+          try {
+            // Find the matching dropoff coordinate
+            final dLoc = iitkDropoffLocations.firstWhere(
+              (loc) =>
+                  loc.name.toLowerCase() == newTrip.endLocName.toLowerCase(),
+            );
+            resolvedDropoff = LatLng(dLoc.latitude, dLoc.longitude);
+          } catch (_) {} // If not found, leaves it as null
+
+          // C. Auto-route to the Ride Confirmed screen
           Future.delayed(const Duration(seconds: 2), () {
             if (mounted) {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) =>
-                      WaitingForDriverScreen(tripID: newTrip.tripID),
+                  builder: (context) => RideConfirmedScreen(
+                    tripID: newTrip.tripID,
+                    pickupPoint: resolvedPickup,
+                    dropoffPoint: resolvedDropoff,
+                  ),
                 ),
               );
             }
           });
+        }
+        // B. Immediate Ride is Accepted (Pending -> Confirmed)
+        else if (oldTrip.status == TripStatus.pending &&
+            newTrip.status == TripStatus.confirmed) {
+          NotificationService().showNotification(
+            title: 'Ride Confirmed!',
+            body: 'Your driver is on the way. PIN: ${newTrip.ridePIN}',
+          );
+          // Auto-routing is already handled perfectly inside your WaitingForDriverScreen!
+        }
+        // C. Ride Officially Starts (Confirmed -> Ongoing)
+        else if (oldTrip.status == TripStatus.confirmed &&
+            newTrip.status == TripStatus.ongoing) {
+          NotificationService().showNotification(
+            title: 'Ride Started',
+            body: 'Your trip has officially begun. Have a safe journey!',
+          );
+          // Auto-routing is already handled perfectly inside your RideConfirmedScreen!
+        }
+        // D. Ride Successfully Completes (Ongoing -> Completed)
+        else if (oldTrip.status == TripStatus.ongoing &&
+            newTrip.status == TripStatus.completed) {
+          NotificationService().showNotification(
+            title: 'Trip Ended',
+            body: 'Thank you for riding with OdoGo!',
+          );
         }
       }
     });
@@ -302,6 +352,26 @@ class _MapHomeViewState extends ConsumerState<_MapHomeView>
     required String destinationName,
     DropoffLocation? dropoff,
   }) {
+    final currentPickupLabel = _buildPickupLabel();
+    // Clean the strings for an accurate comparison
+    String cleanPickup = currentPickupLabel.toLowerCase().trim();
+    // Safely remove the "near " prefix if it was added by the GPS logic
+    if (cleanPickup.startsWith('near ')) {
+      cleanPickup = cleanPickup.substring(5).trim();
+    }
+    String cleanDropoff = destinationName.toLowerCase().trim();
+
+    // Block navigation if they are the exact same place
+    if (cleanPickup == cleanDropoff) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Pickup and Dropoff cannot be the same location.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     final pickupPoint = _resolvedPickupPoint();
     final dropoffPoint = dropoff == null
         ? null
