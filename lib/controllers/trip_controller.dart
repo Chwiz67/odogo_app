@@ -366,4 +366,26 @@ class TripController extends Notifier<AsyncValue<void>> {
       state = AsyncValue.error(e, st);
     }
   }
+
+  Future<void> cancelScheduledRideByCommuter(TripModel trip) async {
+    try {
+      await _repository.updateTripData(trip.tripID, {
+        'status': TripStatus.cancelled.name, 
+      });
+    } catch (e) {
+      print('Error cancelling by commuter: $e');
+    }
+  }
+
+  Future<void> cancelScheduledRideByDriver(TripModel trip) async {
+    try {
+      // 1. Unassign the driver, but leave the status as 'scheduled' so it goes back to the pool
+      await _repository.updateTripData(trip.tripID, {
+        'driverID': null,
+        'driverName': null,
+      });
+    } catch (e) {
+      print('Error cancelling by driver: $e');
+    }
+  }
 }
