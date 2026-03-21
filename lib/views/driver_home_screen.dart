@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:odogo_app/controllers/auth_controller.dart';
 import 'package:odogo_app/controllers/trip_controller.dart';
@@ -620,6 +621,17 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
                             final incomingTrip = incomingTrips[index];
                             return Column(
                               children: [
+                                if (incomingTrip.status == TripStatus.scheduled && incomingTrip.scheduledTime != null) ...[
+                                  Text(
+                                    'Scheduled for ${DateFormat("d MMM, h:mm a").format(incomingTrip.scheduledTime!)}',
+                                    style: const TextStyle(
+                                      color: Colors.red,
+                                      fontWeight: FontWeight.w900, // Extra bold so they don't miss it!
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                ],
                                 _buildMapInfoRow('Passenger:', incomingTrip.commuterName),
                                 _buildMapInfoRow('Pickup:', incomingTrip.startLocName),
                                 Row(
