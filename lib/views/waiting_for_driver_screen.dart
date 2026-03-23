@@ -246,18 +246,18 @@ class _WaitingForDriverScreenState extends ConsumerState<WaitingForDriverScreen>
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: const Color(0xFF66D2A3).withOpacity(0.3)),
                   ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.info_outline, color: Color(0xFF66D2A3)),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Cancellation Policy: You can cancel at most 2 times in 15 minutes.',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.black87),
-                        ),
-                      ),
-                    ],
-                  ),
+                  // child: const Row(
+                  //   children: [
+                  //     Icon(Icons.info_outline, color: Color(0xFF66D2A3)),
+                  //     SizedBox(width: 12),
+                  //     Expanded(
+                  //       child: Text(
+                  //         'Cancellation Policy: You can cancel at most 2 times in 15 minutes.',
+                  //         style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.black87),
+                  //       ),
+                  //     ),
+                  //   ],
+                  // ),
                 ),
                 const SizedBox(height: 16),
                 SizedBox(
