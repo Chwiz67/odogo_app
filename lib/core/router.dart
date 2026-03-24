@@ -35,32 +35,30 @@ final routerProvider = Provider<GoRouter>((ref) {
       final authState = ref.read(authControllerProvider);
       final path = state.uri.path;
 
-      // 1. If Loading, freeze routing entirely.
+      // If Loading, freeze routing entirely.
       if (authState is AuthLoading) {
         return null;
       }
 
-      // 2. THE FIX: Use .startsWith() to prevent hidden trailing slashes from breaking the route.
       final isUnauthRoute =
           path.startsWith('/login') ||
           path.startsWith('/sign-in') ||
           path.startsWith('/otp') ||
           path.startsWith('/account-not-found');
 
-      // 3. Handle Logged-Out Users (BRUTE FORCE BYPASS)
+      // Handle Logged-Out Users
       if (authState is AuthInitial ||
           authState is AuthError ||
           authState is AuthOtpSent) {
+        if (path.startsWith('/splash')) return '/login';
 
-        if (path.startsWith('/splash')) return '/login'; 
+        // If they are going to any unauth route (like /otp), do not intefere.
+        if (isUnauthRoute) return null;
 
-        // If they are going to ANY unauth route (like /otp), DO NOT INTERFERE.
-        if (isUnauthRoute) return null; 
-
-        return '/login'; 
+        return '/login';
       }
 
-      // 4. Handle Logged-In Users
+      // Handle Logged-In Users
       if (authState is AuthAuthenticated) {
         final user = authState.user;
         final isDriver = user.role == UserRole.driver;
@@ -75,14 +73,18 @@ final routerProvider = Provider<GoRouter>((ref) {
           return path.startsWith('/driver-docs') ? null : '/driver-docs';
         }
 
-        if (isUnauthRoute || path.startsWith('/splash') || path.startsWith('/setup') || path.startsWith('/driver-docs')) {
+        if (isUnauthRoute ||
+            path.startsWith('/splash') ||
+            path.startsWith('/setup') ||
+            path.startsWith('/driver-docs')) {
           return isDriver ? '/driver-home' : '/commuter-home';
         }
       }
 
-      // 5. Handle Setup
+      // Handling Setup
       if (authState is AuthNeedsProfileSetup) {
-        return (path.startsWith('/setup') || path.startsWith('/account-not-found'))
+        return (path.startsWith('/setup') ||
+                path.startsWith('/account-not-found'))
             ? null
             : '/account-not-found';
       }

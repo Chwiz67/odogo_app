@@ -40,7 +40,7 @@ class _CommuterHomeScreenState extends ConsumerState<CommuterHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 1. Kickstart the background t=0 monitor
+    // Start the background t=0 monitor
     ref.listen(timeTickerProvider, (previous, next) {
       final now = next.value ?? DateTime.now();
       final trips = ref.read(commuterTripsProvider).value ?? [];
@@ -59,7 +59,7 @@ class _CommuterHomeScreenState extends ConsumerState<CommuterHomeScreen> {
       }
     });
 
-    // 2. Listen for the exact moment a trip changes status
+    // Listen for the exact moment a trip changes status
     ref.listen(commuterTripsProvider, (previous, next) {
       final previousTrips = previous?.value ?? [];
       final nextTrips = next.value ?? [];
