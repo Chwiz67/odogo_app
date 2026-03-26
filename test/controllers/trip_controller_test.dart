@@ -18,13 +18,16 @@ class MockAuthController extends Notifier<AuthState> with Mock implements AuthCo
   AuthState build() => AuthInitial();
 }
 
+// Fake model for the original requestRide tests
+class FakeTripModel extends Fake implements TripModel {}
+
 void main() {
   late MockTripRepository mockTripRepo;
   late MockUserRepository mockUserRepo;
   late MockAuthController mockAuthController;
   late ProviderContainer container;
 
-  // A fake scheduled trip for our tests
+  // A fake scheduled trip for the new scheduled tests
   final scheduledTrip = TripModel(
     tripID: 'trip_123',
     status: TripStatus.scheduled,
@@ -39,6 +42,12 @@ void main() {
     scheduledTime: DateTime.now().add(const Duration(hours: 2)),
   );
 
+  setUpAll(() {
+    // Register fallbacks for BOTH sets of tests so nothing crashes!
+    registerFallbackValue(FakeTripModel());
+    registerFallbackValue(scheduledTrip);
+  });
+
   setUp(() {
     mockTripRepo = MockTripRepository();
     mockUserRepo = MockUserRepository();
@@ -51,15 +60,58 @@ void main() {
         authControllerProvider.overrideWith(() => mockAuthController),
       ],
     );
-
-    // Register fallback values for complex mocktail arguments
-    registerFallbackValue(scheduledTrip);
   });
 
   tearDown(() {
     container.dispose();
   });
 
+  group('TripController - Point 4: Confirm Booking (requestRide)', () {
+    test('requestRide successfully calls repository to create a trip', () async {
+      // --- ARRANGE ---
+      // Tell the mock database to just return a successful empty future when asked to create a trip
+      when(() => mockTripRepo.createTrip(any())).thenAnswer((_) async {});
+
+      final controller = container.read(tripControllerProvider.notifier);
+      final dummyTrip = FakeTripModel();
+
+      // --- ACT ---
+      // Call the exact method from your trip_controller.dart
+      await controller.requestRide(dummyTrip);
+
+      // --- ASSERT ---
+      // 1. Verify the controller successfully passed the trip to the repository
+      verify(() => mockTripRepo.createTrip(any())).called(1);
+      
+      // 2. Verify the controller state went back to Data (not loading/error) after finishing
+      final state = container.read(tripControllerProvider);
+      expect(state.isLoading, false);
+      expect(state.hasError, false);
+    });
+    // ------------------------------------------------------------------
+    // POINT 4 EDGE CASE: Booking Fails (No Internet / DB Error)
+    // ------------------------------------------------------------------
+    test('requestRide sets state to AsyncError when database throws an exception', () async {
+    
+      final dbError = Exception('No Internet Connection or Database Timeout');
+      
+     
+      when(() => mockTripRepo.createTrip(any())).thenThrow(dbError);
+
+      final controller = container.read(tripControllerProvider.notifier);
+      final dummyTrip = FakeTripModel();
+
+      
+      await controller.requestRide(dummyTrip);
+
+      final state = container.read(tripControllerProvider);
+      
+      expect(state.isLoading, false);
+      
+      expect(state.hasError, true);
+      expect(state.error, dbError);
+    });
+  });    
   // ------------------------------------------------------------------
   // TASK 9: Schedule for later
   // ------------------------------------------------------------------
