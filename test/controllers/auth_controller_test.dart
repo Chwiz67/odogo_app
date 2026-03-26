@@ -92,10 +92,9 @@ void main() {
     const testEmail = 'user@gmail.com';
     const testOtp = '0000';
 
-    // 1. Mock the Auth Service returning true for the OTP
     when(() => mockAuthService.verifyOtp(email: testEmail, otp: testOtp)).thenReturn(true);
 
-    // 2. Mock the Database returning a valid user profile
+   
     final fakeUser = UserModel(
       userID: 'user_123',
       emailID: testEmail,
@@ -110,16 +109,37 @@ void main() {
     final controller = container.read(authControllerProvider.notifier);
     await waitForBoot(controller);
 
-    // 3. Act: Submit the OTP
     await controller.verifyOtp(testEmail, testOtp);
 
-    // 4. Assert: Check if the app recognized the login
     final finalState = container.read(authControllerProvider);
     expect(finalState, isA<AuthAuthenticated>());
     expect((finalState as AuthAuthenticated).user.emailID, testEmail);
   });
 
+  // ------------------------------------------------------------------
+  // POINT 3 EDGE CASE: OTP Verification Fails (Wrong OTP)
+  // ------------------------------------------------------------------
+  test('verifyOtp failure sets state to AuthError when OTP is incorrect', () async {
+    const testEmail = 'student@test.com';
+    const wrongOtp = '9999';
 
+    
+    when(() => mockAuthService.verifyOtp(email: testEmail, otp: wrongOtp)).thenReturn(false);
+
+    final controller = container.read(authControllerProvider.notifier);
+    await waitForBoot(controller);
+
+    await controller.verifyOtp(testEmail, wrongOtp);
+
+  
+    final finalState = container.read(authControllerProvider);
+   
+    expect(finalState, isA<AuthError>());
+   
+    expect((finalState as AuthError).message, contains("Invalid or expired OTP"));
+    
+    verifyNever(() => mockUserRepo.getUserByEmail(any()));
+  });
 
   // ------------------------------------------------------------------
   // FEATURE 16: Switch Account
