@@ -84,6 +84,43 @@ void main() {
     expect((finalState as AuthError).message, contains(errorMessage)); 
   });
 
+
+  // ------------------------------------------------------------------
+  // POINT 3: OTP Verification (Login / Register Success)
+  // ------------------------------------------------------------------
+  test('verifyOtp success fetches user and changes state to AuthAuthenticated', () async {
+    const testEmail = 'user@gmail.com';
+    const testOtp = '0000';
+
+    // 1. Mock the Auth Service returning true for the OTP
+    when(() => mockAuthService.verifyOtp(email: testEmail, otp: testOtp)).thenReturn(true);
+
+    // 2. Mock the Database returning a valid user profile
+    final fakeUser = UserModel(
+      userID: 'user_123',
+      emailID: testEmail,
+      name: 'Aiklavyaveer',
+      phoneNo: '9876543210',
+      gender: 'Male',
+      dob: Timestamp.now(),
+      role: UserRole.commuter,
+    );
+    when(() => mockUserRepo.getUserByEmail(testEmail)).thenAnswer((_) async => fakeUser);
+
+    final controller = container.read(authControllerProvider.notifier);
+    await waitForBoot(controller);
+
+    // 3. Act: Submit the OTP
+    await controller.verifyOtp(testEmail, testOtp);
+
+    // 4. Assert: Check if the app recognized the login
+    final finalState = container.read(authControllerProvider);
+    expect(finalState, isA<AuthAuthenticated>());
+    expect((finalState as AuthAuthenticated).user.emailID, testEmail);
+  });
+
+
+
   // ------------------------------------------------------------------
   // FEATURE 16: Switch Account
   // ------------------------------------------------------------------
