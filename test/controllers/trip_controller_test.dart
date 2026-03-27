@@ -36,7 +36,7 @@ void main() {
     List<Timestamp>? history,
   }) {
     return UserModel(
-      userID: 'user_122',
+      userID: 'test@test.com', // Updated for Karthic's review
       emailID: 'test@test.com',
       name: 'Test User',
       phoneNo: '1234567890',
@@ -53,7 +53,7 @@ void main() {
     tripID: 'trip_123',
     status: TripStatus.scheduled,
     commuterName: 'Aditya',
-    commuterID: 'commuter_99',
+    commuterID: 'commuter@test.com', // Updated for Karthic's review
     startLocName: 'IITK Gate',
     endLocName: 'Kanpur Central',
     startTime: DateTime.now().add(const Duration(hours: 2)),
@@ -93,7 +93,7 @@ void main() {
     test('completeRide updates status when both parties finished', () async {
       when(() => mockTripRepo.getTripRawData(tTripId)).thenAnswer(
         (_) async => {
-          'driverID': 'user_122',
+          'driverID': 'test@test.com', // Updated for Karthic's review
           'driverEnd': true,
           'commuterEnd': true,
         },
@@ -128,7 +128,7 @@ void main() {
       );
 
       when(() => mockTripRepo.getTripRawData(tTripId)).thenAnswer(
-        (_) async => {'driverID': 'user_122', 'status': 'confirmed'},
+        (_) async => {'driverID': 'test@test.com', 'status': 'confirmed'}, // Updated for Karthic's review
       );
 
       final controller = localContainer.read(tripControllerProvider.notifier);
@@ -195,7 +195,7 @@ void main() {
 
   test('acceptRide successfully claims a scheduled ride and updates driver mode', () async {
     const tripID = 'trip_123';
-    const driverID = 'driver_456';
+    const driverID = 'driver@test.com'; // Updated for Karthic's review
     const driverName = 'John Doe';
 
     when(() => mockTripRepo.runAcceptRideTransaction(
@@ -250,5 +250,20 @@ void main() {
       'driverID': null,
       'driverName': null,
     })).called(1);
+  });
+
+  // ------------------------------------------------------------------
+  // NEW TEST: Task 21 - Auto-Cancel Expired Ride (Timeout)
+  // ------------------------------------------------------------------
+  test('autoCancelExpiredRide successfully marks trip as cancelled in database', () async {
+    const testTripID = 'trip_999';
+
+    when(() => mockTripRepo.updateTripData(testTripID, {'status': TripStatus.cancelled.name}))
+        .thenAnswer((_) async {});
+
+    final controller = container.read(tripControllerProvider.notifier);
+    await controller.autoCancelExpiredRide(testTripID);
+
+    verify(() => mockTripRepo.updateTripData(testTripID, {'status': TripStatus.cancelled.name})).called(1);
   });
 }

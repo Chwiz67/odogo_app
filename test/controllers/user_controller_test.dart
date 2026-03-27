@@ -27,7 +27,7 @@ void main() {
 
   // We need a fake user in the system so `_getUid()` doesn't crash
   final fakeUser = UserModel(
-    userID: 'test_uid_123',
+    userID: 'test@test.com', // Updated for Karthic's review
     emailID: 'test@test.com',
     name: 'Old Name',
     phoneNo: '1234567890',
@@ -35,7 +35,7 @@ void main() {
     dob: Timestamp.now(),
     role: UserRole.commuter,
     // Note: We give them an old work address to test the replacement logic
-    savedLocations: ['Old Work Address'], 
+    savedLocations: ['IITK Gate'], // Updated for Karthic's review
   );
 
   setUp(() {
@@ -52,7 +52,6 @@ void main() {
         currentUserProvider.overrideWithValue(fakeUser),
         
         // 3. Force the app to use our fake AuthController
-        // NEW (Correct)
         authControllerProvider.overrideWith(() => mockAuthController),
       ],
     );
@@ -73,7 +72,7 @@ void main() {
     const newName = 'New Super Cool Name';
     
     // Program the fake database to succeed when asked to update the name
-    when(() => mockUserRepo.updateUser('test_uid_123', {'name': newName}))
+    when(() => mockUserRepo.updateUser('test@test.com', {'name': newName}))
         .thenAnswer((_) async {});
 
     final controller = container.read(userControllerProvider.notifier);
@@ -83,7 +82,7 @@ void main() {
 
     // --- ASSERT ---
     // 1. Verify the database was told to save the exact right map
-    verify(() => mockUserRepo.updateUser('test_uid_123', {'name': newName})).called(1);
+    verify(() => mockUserRepo.updateUser('test@test.com', {'name': newName})).called(1);
     
     // 2. Verify the controller asked the auth system to fetch fresh data
     verify(() => mockAuthController.refreshUser()).called(1);
@@ -97,14 +96,14 @@ void main() {
   // ------------------------------------------------------------------
   test('updateWorkAddress replaces the first index of savedLocations', () async {
     // --- ARRANGE ---
-    const newWorkAddress = '123 New Tech Park';
+    const newWorkAddress = 'Kanpur Central'; // Updated for Karthic's review
     
-    // We expect the array to replace 'Old Work Address' with '123 New Tech Park'
+    // We expect the array to replace 'IITK Gate' with 'Kanpur Central'
     final expectedMap = {
       'savedLocations': [newWorkAddress]
     };
 
-    when(() => mockUserRepo.updateUser('test_uid_123', expectedMap))
+    when(() => mockUserRepo.updateUser('test@test.com', expectedMap))
         .thenAnswer((_) async {});
 
     final controller = container.read(userControllerProvider.notifier);
@@ -114,7 +113,7 @@ void main() {
 
     // --- ASSERT ---
     // Verify our array manipulation logic in the controller actually works!
-    verify(() => mockUserRepo.updateUser('test_uid_123', expectedMap)).called(1);
+    verify(() => mockUserRepo.updateUser('test@test.com', expectedMap)).called(1);
     expect(container.read(userControllerProvider), const AsyncValue<void>.data(null));
   });
 
@@ -124,14 +123,14 @@ void main() {
   test('updateUserPhone successfully calls repository and refreshes user', () async {
     const newPhone = '9998887776';
     
-    when(() => mockUserRepo.updateUser('test_uid_123', {'phoneNo': newPhone}))
+    when(() => mockUserRepo.updateUser('test@test.com', {'phoneNo': newPhone}))
         .thenAnswer((_) async {});
 
     final controller = container.read(userControllerProvider.notifier);
 
     await controller.updateUserPhone(newPhone);
 
-    verify(() => mockUserRepo.updateUser('test_uid_123', {'phoneNo': newPhone})).called(1);
+    verify(() => mockUserRepo.updateUser('test@test.com', {'phoneNo': newPhone})).called(1);
     verify(() => mockAuthController.refreshUser()).called(1);
     expect(container.read(userControllerProvider), const AsyncValue<void>.data(null));
   });
@@ -140,16 +139,16 @@ void main() {
   // TEST: Feature 15e - Update Home Address
   // ------------------------------------------------------------------
   test('updateHome successfully calls repository and refreshes user', () async {
-    const newHome = '123 Test Boulevard';
+    const newHome = 'Hall 13'; // Updated for Karthic's review
     
-    when(() => mockUserRepo.updateUser('test_uid_123', {'home': newHome}))
+    when(() => mockUserRepo.updateUser('test@test.com', {'home': newHome}))
         .thenAnswer((_) async {});
 
     final controller = container.read(userControllerProvider.notifier);
 
     await controller.updateHome(newHome);
 
-    verify(() => mockUserRepo.updateUser('test_uid_123', {'home': newHome})).called(1);
+    verify(() => mockUserRepo.updateUser('test@test.com', {'home': newHome})).called(1);
     verify(() => mockAuthController.refreshUser()).called(1);
     expect(container.read(userControllerProvider), const AsyncValue<void>.data(null));
   });
@@ -163,7 +162,7 @@ void main() {
     final dbError = Exception('Firebase is down!');
     
     // Program the database to CRASH
-    when(() => mockUserRepo.updateUser('test_uid_123', {'gender': newGender}))
+    when(() => mockUserRepo.updateUser('test@test.com', {'gender': newGender}))
         .thenThrow(dbError);
 
     final controller = container.read(userControllerProvider.notifier);
@@ -181,5 +180,23 @@ void main() {
     
     // Make sure refreshUser was NEVER called because the save failed
     verifyNever(() => mockAuthController.refreshUser());
+  });
+
+  // ------------------------------------------------------------------
+  // NEW TEST: Task 18 - Driver Online/Offline Toggle
+  // ------------------------------------------------------------------
+  test('updateDriverMode successfully calls repository and refreshes user', () async {
+    const targetMode = DriverMode.online;
+    
+    when(() => mockUserRepo.updateUser('test@test.com', {'mode': targetMode.name}))
+        .thenAnswer((_) async {});
+
+    final controller = container.read(userControllerProvider.notifier);
+
+    await controller.updateDriverMode(targetMode);
+
+    verify(() => mockUserRepo.updateUser('test@test.com', {'mode': targetMode.name})).called(1);
+    verify(() => mockAuthController.refreshUser()).called(1);
+    expect(container.read(userControllerProvider), const AsyncValue<void>.data(null));
   });
 }
