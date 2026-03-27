@@ -38,7 +38,7 @@ void main() {
         commuterName: 'Karthic',
         commuterID: 'karthic@test.com',
         startLocName: 'IITK Gate',
-        endLocName: 'Kanpur Central',
+        endLocName: 'Hall 5',
         startTime: DateTime.now(),
         ridePIN: '1234',
         driverEnd: false,
@@ -66,7 +66,7 @@ void main() {
       await tester.pump();
 
       // 3. Assert
-      expect(find.text('Kanpur Central'), findsOneWidget);
+      expect(find.text('Hall 5'), findsOneWidget);
       expect(find.text('Karthic'), findsOneWidget);
       expect(find.text('Heading to Drop-off'), findsOneWidget);
       expect(find.text('END TRIP'), findsOneWidget);

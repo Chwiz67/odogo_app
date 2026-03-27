@@ -96,9 +96,9 @@ void main() {
   // ------------------------------------------------------------------
   test('updateWorkAddress replaces the first index of savedLocations', () async {
     // --- ARRANGE ---
-    const newWorkAddress = 'Kanpur Central'; // Updated for Karthic's review
+    const newWorkAddress = 'Hall 5'; // Updated for Karthic's review
     
-    // We expect the array to replace 'IITK Gate' with 'Kanpur Central'
+    // We expect the array to replace 'IITK Gate' with 'Hall 5'
     final expectedMap = {
       'savedLocations': [newWorkAddress]
     };

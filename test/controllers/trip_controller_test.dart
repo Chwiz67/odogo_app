@@ -55,7 +55,7 @@ void main() {
     commuterName: 'Aditya',
     commuterID: 'commuter@test.com', // Updated for Karthic's review
     startLocName: 'IITK Gate',
-    endLocName: 'Kanpur Central',
+    endLocName: 'Hall 5',
     startTime: DateTime.now().add(const Duration(hours: 2)),
     ridePIN: '1234',
     driverEnd: false,
