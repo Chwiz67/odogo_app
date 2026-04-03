@@ -5,7 +5,6 @@ import 'package:url_launcher_platform_interface/url_launcher_platform_interface.
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 import 'package:odogo_app/services/contact_launcher_service.dart';
 
-// We have to mock the platform interface so the test doesn't actually try to open a real phone app
 class MockUrlLauncher extends Mock
     with MockPlatformInterfaceMixin
     implements UrlLauncherPlatform {}
@@ -21,92 +20,90 @@ void main() {
 
   setUp(() {
     mockLauncher = MockUrlLauncher();
-    // Force the app to use our fake launcher instead of the real Android/iOS launcher
     UrlLauncherPlatform.instance = mockLauncher;
   });
 
-  // Helper function to build a fake UI screen so we can get a valid 'BuildContext'
+  // Helper to provide a BuildContext for SnackBar tests
   Widget createTestApp(Future<void> Function(BuildContext) action) {
     return MaterialApp(
       home: Scaffold(
         body: Builder(
-          builder: (context) {
-            return ElevatedButton(
-              onPressed: () => action(context),
-              child: const Text('Trigger Action'),
-            );
-          },
+          builder: (context) => ElevatedButton(
+            onPressed: () => action(context),
+            child: const Text('Tap'),
+          ),
         ),
       ),
     );
   }
 
-  group('ContactLauncherService Tests (Task 19)', () {
-    testWidgets('callNumber sanitizes phone string and launches tel: URI', (
-      WidgetTester tester,
-    ) async {
-      // Arrange: Program the fake launcher to pretend it successfully opened the phone app
+  group('ContactLauncherService Exhaustive Tests', () {
+    testWidgets('callNumber succeeds and sanitizes input', (tester) async {
       when(
         () => mockLauncher.launchUrl(any(), any()),
       ).thenAnswer((_) async => true);
-
-      // We pass a messy phone number with spaces and dashes to test the _sanitizePhone logic
       await tester.pumpWidget(
         createTestApp(
-          (context) =>
-              ContactLauncherService.callNumber(context, '+91 98765-43210'),
+          (c) => ContactLauncherService.callNumber(c, '+91 98-765 43210'),
         ),
       );
-
-      // Act: Tap the button
-      await tester.tap(find.text('Trigger Action'));
+      await tester.tap(find.text('Tap'));
       await tester.pumpAndSettle();
-
-      // Assert: Did it strip the spaces/dashes and format the 'tel:' link correctly?
       verify(
         () => mockLauncher.launchUrl('tel:+919876543210', any()),
       ).called(1);
     });
 
-    testWidgets('smsNumber sanitizes phone string and launches sms: URI', (
-      WidgetTester tester,
+    testWidgets('callNumber shows SnackBar if app fails to launch', (
+      tester,
     ) async {
       when(
         () => mockLauncher.launchUrl(any(), any()),
-      ).thenAnswer((_) async => true);
+      ).thenAnswer((_) async => false);
+      await tester.pumpWidget(
+        createTestApp((c) => ContactLauncherService.callNumber(c, '123')),
+      );
+      await tester.tap(find.text('Tap'));
+      await tester.pump();
+      expect(find.text('Could not open phone app.'), findsOneWidget);
+    });
 
+    testWidgets('callNumber aborts on empty string', (tester) async {
+      await tester.pumpWidget(
+        createTestApp((c) => ContactLauncherService.callNumber(c, 'abcd')),
+      );
+      await tester.tap(find.text('Tap'));
+      await tester.pump();
+      expect(find.text('Phone number not available.'), findsOneWidget);
+      verifyNever(() => mockLauncher.launchUrl(any(), any()));
+    });
+
+    testWidgets('smsNumber succeeds and sanitizes input', (tester) async {
+      when(
+        () => mockLauncher.launchUrl(any(), any()),
+      ).thenAnswer((_) async => true);
       await tester.pumpWidget(
         createTestApp(
-          (context) =>
-              ContactLauncherService.smsNumber(context, '(123) 456 7890'),
+          (c) => ContactLauncherService.smsNumber(c, '(123) 456 7890'),
         ),
       );
-
-      await tester.tap(find.text('Trigger Action'));
+      await tester.tap(find.text('Tap'));
       await tester.pumpAndSettle();
-
-      // Assert: Did it format the 'sms:' link correctly?
       verify(() => mockLauncher.launchUrl('sms:1234567890', any())).called(1);
     });
 
-    testWidgets('shows SnackBar if phone number is empty', (
-      WidgetTester tester,
+    testWidgets('smsNumber shows SnackBar if app fails to launch', (
+      tester,
     ) async {
-      // Act: Pass a null phone number
+      when(
+        () => mockLauncher.launchUrl(any(), any()),
+      ).thenAnswer((_) async => false);
       await tester.pumpWidget(
-        createTestApp(
-          (context) => ContactLauncherService.callNumber(context, null),
-        ),
+        createTestApp((c) => ContactLauncherService.smsNumber(c, '123')),
       );
-      await tester.tap(find.text('Trigger Action'));
-      await tester.pump(); // Pump once to trigger the SnackBar
-
-      // Assert: Did the orange SnackBar appear on screen?
-      expect(find.byType(SnackBar), findsOneWidget);
-      expect(find.text('Phone number not available.'), findsOneWidget);
-
-      // Verify it NEVER tried to open the phone app
-      verifyNever(() => mockLauncher.launchUrl(any(), any()));
+      await tester.tap(find.text('Tap'));
+      await tester.pump();
+      expect(find.text('Could not open messages app.'), findsOneWidget);
     });
   });
 }
