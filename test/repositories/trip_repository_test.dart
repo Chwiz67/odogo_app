@@ -82,5 +82,40 @@ void main() {
       // Verify other data like the PIN stayed the same
       expect(doc.data()?['ridePIN'], '1234');
     });
+    test('runAcceptRideTransaction updates status atomically', () async {
+      await fakeDb.collection('trips').doc('trip123').set({
+        'status': 'pending',
+        'driverID': null,
+      });
+
+      await repository.runAcceptRideTransaction(
+        tripID: 'trip123',
+        driverID: 'd_007',
+        driverName: 'Bond',
+        isScheduled: false,
+      );
+
+      final doc = await fakeDb.collection('trips').doc('trip123').get();
+      expect(doc.data()?['status'], 'confirmed');
+      expect(doc.data()?['driverID'], 'd_007');
+    });
+
+    test('cleanupOldTrips removes trips beyond 100 limit', () async {
+      const userID = 'user1';
+      // Create 105 "completed" trips
+      for (int i = 0; i < 105; i++) {
+        await fakeDb.collection('trips').doc('t_$i').set({
+          'commuterID': userID,
+          'status': 'completed',
+          'bookingTime': DateTime.now().subtract(Duration(minutes: i)),
+        });
+      }
+
+      await repository.cleanupOldTrips(userID, 'commuterID');
+
+      final remaining = await fakeDb.collection('trips').get();
+      // Should cap at 100
+      expect(remaining.docs.length, 100);
+    });
   });
 }

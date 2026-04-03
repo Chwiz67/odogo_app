@@ -2,7 +2,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:odogo_app/models/notification_model.dart';
 
 class NotificationRepository {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  // 1. Remove the hardcoded initialization
+  final FirebaseFirestore _firestore;
+
+  // 2. Add this constructor to allow "Dependency Injection"
+  NotificationRepository({FirebaseFirestore? firestore})
+    : _firestore = firestore ?? FirebaseFirestore.instance;
+
+  // 3. Keep using _firestore here as before
   CollectionReference get _notifications =>
       _firestore.collection('notifications');
 
@@ -24,7 +31,7 @@ class NotificationRepository {
         );
   }
 
-  /// Marks a specific notification as read so it disappears from the badge count.
+  /// Marks a specific notification as read.
   Future<void> markAsRead(String notificationID) async {
     await _notifications.doc(notificationID).update({'isRead': true});
   }
