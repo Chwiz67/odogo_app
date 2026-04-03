@@ -27,7 +27,7 @@ class SmsOtpAuthService {
   bool get _isOtpBypassEnabled => !kReleaseMode && _bypassOtpFromEnv;
 
   Future<void> sendOtp({required String phoneNumber}) async {
-    // 1. Check for bypass mode (perfect for emulator testing without burning API credits)
+    // Check for bypass mode
     if (_isOtpBypassEnabled) {
       _otpStore[phoneNumber] = _OtpSession(
         code: _debugBypassCode,
@@ -36,7 +36,7 @@ class SmsOtpAuthService {
       return;
     }
 
-    if (_smsApiKey.isEmpty || _smsApiKey == 'YOUR_API_KEY_HERE') {
+    if (_smsApiKey.isEmpty) {
       throw StateError(
         'SMS API is not configured yet. Please add a valid API key.',
       );
@@ -49,7 +49,7 @@ class SmsOtpAuthService {
       expiresAt: DateTime.now().add(_otpValidity),
     );
 
-    // Send the HTTP request to the SMS Provider (Example: Fast2SMS API V2)
+    // Send the HTTP request to the SMS Provider
     final response = await http.post(
       Uri.parse('https://www.fast2sms.com/dev/bulkV2'),
       headers: <String, String>{
@@ -62,7 +62,7 @@ class SmsOtpAuthService {
             'Your OdoGo verification code is $otp. Do not share this with anyone.',
         'flash': 0,
         'numbers':
-            phoneNumber, // Note: Ensure the UI strips the '+' sign if the API requires it
+            phoneNumber,
       }),
     );
 
@@ -72,7 +72,7 @@ class SmsOtpAuthService {
     }
   }
 
-  // Verifies the code locally without making any network requests!
+  // Verifies the code locally without making any network requests
   bool verifyOtp({required String phoneNumber, required String otp}) {
     if (_isOtpBypassEnabled) {
       return otp == _debugBypassCode;
@@ -98,9 +98,9 @@ class SmsOtpAuthService {
   }
 
   String _generateOtp() {
-    // Generates a 6-digit OTP for SMS (a bit more standard than 4 for phones)
-    final value = _random.nextInt(1000000);
-    return value.toString().padLeft(6, '0');
+    // Generates a 4-digit OTP for SMS
+    final value = _random.nextInt(10000);
+    return value.toString().padLeft(4, '0');
   }
 }
 

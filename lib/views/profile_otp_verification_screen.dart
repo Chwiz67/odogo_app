@@ -87,7 +87,8 @@ class _ProfileOtpVerificationScreenState
         return;
       }
     } else {
-      if (_isOtpBypassEnabled && otp != _debugBypassCode) {
+      final expectedOtp = _isOtpBypassEnabled ? "0000" : "1234";
+      if (otp != expectedOtp) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Invalid OTP for test mode. Use 0000.'),
@@ -135,12 +136,21 @@ class _ProfileOtpVerificationScreenState
 
   Future<void> _resendOtp() async {
     if (widget.verificationEmail == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('New code sent!'),
-          backgroundColor: odogoGreen,
-        ),
-      );
+      setState(() {
+        _isLoading = true;
+      });
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('New code sent!'),
+            backgroundColor: odogoGreen,
+          ),
+        );
+      }
       return;
     }
 
