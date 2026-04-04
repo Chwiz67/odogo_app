@@ -132,11 +132,11 @@ lib/
 
 ## Documentation
 
-* **Software Requirement Specification (SRS):** TBA <!--[Link to SRS Document](#)-->
-* **Software Design Document (SDD):** TBA <!--[Link to SDD Document](#)-->
-* **Software Implementation Document (SID):** TBA <!--[Link to SID Document](#)-->
-* **Software Test Document:** TBA <!--[Link to Test Document](#)-->
-* **Software User Manual:** TBA <!--[Link to User Manual](#)-->
+* **Software Requirement Specification (SRS):** [Link to SRS Document](docs/Software%20Requirements%20Specification.pdf)
+* **Software Design Document (SDD):**  [Link to SDD Document](docs/Software%20Design%20Document.pdf)
+* **Software Implementation Document (SID):**  [Link to SID Document](docs/Implementation%20Document.pdf)
+* **Software Test Document:**  [Link to Test Document](docs/Testing%20Document.pdf)
+* **Software User Manual:** [Link to User Manual](docs/User%20Manual.pdf)
 * **Final Presentation:** TBA <!--[Link to Presentation Deck](#)-->
 
 ---
