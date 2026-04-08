@@ -359,11 +359,7 @@ class _DriverActiveTripScreenState
               backgroundColor: Colors.green,
             ),
           );
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (context) => const DriverHomeScreen()),
-            (route) => false,
-          );
+          Navigator.popUntil(context, (route) => route.isFirst);
         }
       }
     });
