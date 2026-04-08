@@ -144,38 +144,6 @@ class _WaitingForDriverScreenState
           errorBuilder: (context, error, stackTrace) =>
               const Icon(Icons.local_taxi, color: Color(0xFF66D2A3), size: 40),
         ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16.0),
-            child: ElevatedButton.icon(
-              onPressed: () {},
-              icon: const Icon(
-                Icons.calendar_month,
-                color: Colors.black,
-                size: 18,
-              ),
-              label: const Text(
-                'Schedule\nbookings',
-                style: TextStyle(
-                  color: Colors.black,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF66D2A3),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
       body: Column(
         children: [
