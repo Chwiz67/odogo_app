@@ -38,6 +38,7 @@ class _TripConfirmationScreenState
     extends ConsumerState<TripConfirmationScreen> {
   List<LatLng>? _routePoints;
   static const double _minFitDistanceMeters = 5;
+  bool _isRequestingRide = false;
 
   @override
   void initState() {
@@ -280,84 +281,104 @@ class _TripConfirmationScreenState
                   const SizedBox(height: 24),
 
                   ElevatedButton(
-                    onPressed: () async {
-                      // Grab the current user
-                      final currentUser = ref.read(currentUserProvider);
-                      if (currentUser == null) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Error: User not logged in'),
-                          ),
-                        );
-                        return;
-                      }
+                    // Disable the button if it's currently loading
+                    onPressed: _isRequestingRide
+                        ? null
+                        : () async {
+                            // Trigger the loading spinner
+                            setState(() {
+                              _isRequestingRide = true;
+                            });
 
-                      final String uniqueTripId =
-                          'trip_${DateTime.now().millisecondsSinceEpoch}';
+                            // Grab the current user
+                            final currentUser = ref.read(currentUserProvider);
+                            if (currentUser == null) {
+                              setState(() {
+                                _isRequestingRide = false;
+                              });
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Error: User not logged in'),
+                                ),
+                              );
+                              return;
+                            }
 
-                      // Generate a random 4-digit PIN
-                      final String generatedPin = Random()
-                          .nextInt(10000)
-                          .toString()
-                          .padLeft(4, '0');
+                            final String uniqueTripId =
+                                'trip_${DateTime.now().millisecondsSinceEpoch}';
 
-                      // Create the TripModel
-                      final newTrip = TripModel(
-                        tripID: uniqueTripId,
-                        commuterName: currentUser.name,
-                        commuterID: currentUser.userID,
-                        driverName: null,
-                        driverID: null,
-                        startLocName: widget.pickupLabel,
-                        startLatitude: widget.pickupPoint?.latitude,
-                        startLongitude: widget.pickupPoint?.longitude,
-                        endLocName: widget.destination,
-                        startTime: null,
-                        status: TripStatus.pending,
-                        ridePIN: generatedPin,
-                        driverEnd: false,
-                        commuterEnd: false,
-                        eta: null,
-                        scheduledTime: null,
-                        bookingTime: DateTime.now(),
-                      );
+                            // Generate a random 4-digit PIN
+                            final String generatedPin = Random()
+                                .nextInt(10000)
+                                .toString()
+                                .padLeft(4, '0');
 
-                      // Send it to Firestore via the Controller
-                      try {
-                        await ref
-                            .read(tripControllerProvider.notifier)
-                            .requestRide(newTrip);
+                            // Create the TripModel
+                            final newTrip = TripModel(
+                              tripID: uniqueTripId,
+                              commuterName: currentUser.name,
+                              commuterID: currentUser.userID,
+                              driverName: null,
+                              driverID: null,
+                              startLocName: widget.pickupLabel,
+                              startLatitude: widget.pickupPoint?.latitude,
+                              startLongitude: widget.pickupPoint?.longitude,
+                              endLocName: widget.destination,
+                              startTime: null,
+                              status: TripStatus.pending,
+                              ridePIN: generatedPin,
+                              driverEnd: false,
+                              commuterEnd: false,
+                              eta: null,
+                              scheduledTime: null,
+                              bookingTime: DateTime.now(),
+                            );
 
-                        // If successful, navigate to the waiting screen with ALL data
-                        if (mounted) {
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => WaitingForDriverScreen(
-                                tripID: uniqueTripId,
-                                dropoffPoint: widget.dropoffPoint,
-                                pickupPoint: widget.pickupPoint,
-                              ),
-                            ),
-                          );
-                        }
-                      } catch (e) {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Failed to request ride: $e'
-                                    .replaceFirst('Exception: ', '')
-                                    .trim(),
-                              ),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                        }
-                      }
-                    },
+                            // Send it to Firestore via the Controller
+                            try {
+                              await ref
+                                  .read(tripControllerProvider.notifier)
+                                  .requestRide(newTrip);
+
+                              // If successful, navigate to the waiting screen with ALL data
+                              if (mounted) {
+                                Navigator.pushReplacement(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        WaitingForDriverScreen(
+                                          tripID: uniqueTripId,
+                                          dropoffPoint: widget.dropoffPoint,
+                                          pickupPoint: widget.pickupPoint,
+                                        ),
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              if (mounted) {
+                                // Stop the spinner if it fails so they can try again
+                                setState(() {
+                                  _isRequestingRide = false;
+                                });
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Failed to request ride: $e'
+                                          .replaceFirst('Exception: ', '')
+                                          .trim(),
+                                    ),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            }
+                          },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF66D2A3),
+                      // Keeps the button green even when disabled
+                      disabledBackgroundColor: const Color(
+                        0xFF66D2A3,
+                      ).withValues(alpha: 0.8),
                       foregroundColor: Colors.black,
                       minimumSize: const Size.fromHeight(56),
                       shape: RoundedRectangleBorder(
@@ -365,13 +386,23 @@ class _TripConfirmationScreenState
                       ),
                       elevation: 0,
                     ),
-                    child: const Text(
-                      'Confirm Trip',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    // 4. Swap the text out for a spinner
+                    child: _isRequestingRide
+                        ? const SizedBox(
+                            height: 24,
+                            width: 24,
+                            child: CircularProgressIndicator(
+                              color: Colors.black,
+                              strokeWidth: 2.5,
+                            ),
+                          )
+                        : const Text(
+                            'Confirm Trip',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                   ),
                 ],
               ),
