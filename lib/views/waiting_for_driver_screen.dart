@@ -129,231 +129,235 @@ class _WaitingForDriverScreenState
         );
       }
     });
+    return PopScope(
+      canPop: false, // Prevents the system from instantly popping the screen
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        toolbarHeight: 70,
-        title: Image.asset(
-          'assets/images/odogo_logo_black_bg.jpeg',
-          height: 40,
-          errorBuilder: (context, error, stackTrace) =>
-              const Icon(Icons.local_taxi, color: Color(0xFF66D2A3), size: 40),
+        // If they swipe back or press the hardware back button,
+        // silently trigger your cancel function instead!
+        if (!_isCancelling) {
+          _cancelRide();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        extendBodyBehindAppBar: true,
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          toolbarHeight: 70,
+          title: Image.asset(
+            'assets/images/odogo_logo_black_bg.jpeg',
+            height: 40,
+            errorBuilder: (context, error, stackTrace) => const Icon(
+              Icons.local_taxi,
+              color: Color(0xFF66D2A3),
+              size: 40,
+            ),
+          ),
         ),
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: Stack(
-              children: [
-                if (_currentLocation != null ||
-                    widget.pickupPoint != null ||
-                    widget.dropoffPoint != null)
-                  FlutterMap(
-                    options: MapOptions(
-                      initialCenter:
-                          _currentLocation ??
-                          widget.pickupPoint ??
-                          widget.dropoffPoint!,
-                      initialZoom: 16.0,
-                      interactionOptions: const InteractionOptions(
-                        flags: InteractiveFlag.all,
+        body: Column(
+          children: [
+            Expanded(
+              child: Stack(
+                children: [
+                  if (_currentLocation != null ||
+                      widget.pickupPoint != null ||
+                      widget.dropoffPoint != null)
+                    FlutterMap(
+                      options: MapOptions(
+                        initialCenter:
+                            _currentLocation ??
+                            widget.pickupPoint ??
+                            widget.dropoffPoint!,
+                        initialZoom: 16.0,
+                        interactionOptions: const InteractionOptions(
+                          flags: InteractiveFlag.all,
+                        ),
+                      ),
+                      children: [
+                        TileLayer(
+                          urlTemplate:
+                              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          userAgentPackageName: 'com.example.odogo_app',
+                          tileBuilder: (context, tileWidget, tile) {
+                            return ColorFiltered(
+                              colorFilter: const ColorFilter.matrix([
+                                -0.2126,
+                                -0.7152,
+                                -0.0722,
+                                0,
+                                255,
+                                -0.2126,
+                                -0.7152,
+                                -0.0722,
+                                0,
+                                255,
+                                -0.2126,
+                                -0.7152,
+                                -0.0722,
+                                0,
+                                255,
+                                0,
+                                0,
+                                0,
+                                1,
+                                0,
+                              ]),
+                              child: tileWidget,
+                            );
+                          },
+                        ),
+                        MarkerLayer(
+                          markers: [
+                            if (_currentLocation != null)
+                              Marker(
+                                point: _currentLocation!,
+                                child: const Icon(
+                                  Icons.my_location,
+                                  color: Color(0xFF66D2A3),
+                                  size: 40,
+                                ),
+                              ),
+                            if (widget.pickupPoint != null)
+                              Marker(
+                                point: widget.pickupPoint!,
+                                child: const Icon(
+                                  Icons.location_on,
+                                  color: Colors.white,
+                                  size: 38,
+                                ),
+                              )
+                            else if (widget.dropoffPoint != null)
+                              Marker(
+                                point: widget.dropoffPoint!,
+                                child: const Icon(
+                                  Icons.location_on,
+                                  color: Colors.redAccent,
+                                  size: 38,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    )
+                  else
+                    const Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xFF66D2A3),
                       ),
                     ),
-                    children: [
-                      TileLayer(
-                        urlTemplate:
-                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                        userAgentPackageName: 'com.example.odogo_app',
-                        tileBuilder: (context, tileWidget, tile) {
-                          return ColorFiltered(
-                            colorFilter: const ColorFilter.matrix([
-                              -0.2126,
-                              -0.7152,
-                              -0.0722,
-                              0,
-                              255,
-                              -0.2126,
-                              -0.7152,
-                              -0.0722,
-                              0,
-                              255,
-                              -0.2126,
-                              -0.7152,
-                              -0.0722,
-                              0,
-                              255,
-                              0,
-                              0,
-                              0,
-                              1,
-                              0,
-                            ]),
-                            child: tileWidget,
-                          );
-                        },
+                ],
+              ),
+            ),
+
+            Container(
+              padding: const EdgeInsets.only(
+                top: 24,
+                left: 24,
+                right: 24,
+                bottom: 40,
+              ),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 10,
+                    offset: Offset(0, -5),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'TRIP STATUS',
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  Text(
+                    _wasDroppedByDriver
+                        ? 'DRIVER CANCELLED.\nRE-SEARCHING...'
+                        : 'WAITING FOR DRIVER',
+                    style: TextStyle(
+                      fontSize: _wasDroppedByDriver ? 20 : 22,
+                      fontWeight: FontWeight.w900,
+                      color: _wasDroppedByDriver
+                          ? Colors.orange.shade800
+                          : Colors.black87,
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: LinearProgressIndicator(
+                      minHeight: 6,
+                      backgroundColor: Colors.grey[200],
+                      color: _wasDroppedByDriver
+                          ? Colors.orange
+                          : const Color(0xFF66D2A3),
+                    ),
+                  ),
+
+                  const SizedBox(height: 32),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF66D2A3).withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: const Color(0xFF66D2A3).withOpacity(0.3),
                       ),
-                      MarkerLayer(
-                        markers: [
-                          if (_currentLocation != null)
-                            Marker(
-                              point: _currentLocation!,
-                              child: const Icon(
-                                Icons.my_location,
-                                color: Color(0xFF66D2A3),
-                                size: 40,
-                              ),
-                            ),
-                          if (widget.pickupPoint != null)
-                            Marker(
-                              point: widget.pickupPoint!,
-                              child: const Icon(
-                                Icons.location_on,
-                                color: Colors.white,
-                                size: 38,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton(
+                      onPressed: _isCancelling ? null : _cancelRide,
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: _isCancelling
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.red,
+                                strokeWidth: 2,
                               ),
                             )
-                          else if (widget.dropoffPoint != null)
-                            Marker(
-                              point: widget.dropoffPoint!,
-                              child: const Icon(
-                                Icons.location_on,
-                                color: Colors.redAccent,
-                                size: 38,
+                          : const Text(
+                              'Cancel Ride',
+                              style: TextStyle(
+                                color: Colors.red,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
                               ),
                             ),
-                        ],
-                      ),
-                    ],
-                  )
-                else
-                  const Center(
-                    child: CircularProgressIndicator(color: Color(0xFF66D2A3)),
-                  ),
-              ],
-            ),
-          ),
-
-          Container(
-            padding: const EdgeInsets.only(
-              top: 24,
-              left: 24,
-              right: 24,
-              bottom: 40,
-            ),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black26,
-                  blurRadius: 10,
-                  offset: Offset(0, -5),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'TRIP STATUS',
-                  style: TextStyle(
-                    color: Colors.grey,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-                const SizedBox(height: 8),
-
-                Text(
-                  _wasDroppedByDriver
-                      ? 'DRIVER CANCELLED.\nRE-SEARCHING...'
-                      : 'WAITING FOR DRIVER',
-                  style: TextStyle(
-                    fontSize: _wasDroppedByDriver ? 20 : 22,
-                    fontWeight: FontWeight.w900,
-                    color: _wasDroppedByDriver
-                        ? Colors.orange.shade800
-                        : Colors.black87,
-                  ),
-                ),
-
-                const SizedBox(height: 24),
-
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: LinearProgressIndicator(
-                    minHeight: 6,
-                    backgroundColor: Colors.grey[200],
-                    color: _wasDroppedByDriver
-                        ? Colors.orange
-                        : const Color(0xFF66D2A3),
-                  ),
-                ),
-
-                const SizedBox(height: 32),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF66D2A3).withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: const Color(0xFF66D2A3).withOpacity(0.3),
                     ),
                   ),
-                  // child: const Row(
-                  //   children: [
-                  //     Icon(Icons.info_outline, color: Color(0xFF66D2A3)),
-                  //     SizedBox(width: 12),
-                  //     Expanded(
-                  //       child: Text(
-                  //         'Cancellation Policy: You can cancel at most 2 times in 15 minutes.',
-                  //         style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.black87),
-                  //       ),
-                  //     ),
-                  //   ],
-                  // ),
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: TextButton(
-                    onPressed: _isCancelling ? null : _cancelRide,
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: _isCancelling
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.red,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : const Text(
-                            'Cancel Ride',
-                            style: TextStyle(
-                              color: Colors.red,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
