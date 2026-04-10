@@ -386,7 +386,7 @@ class _TripConfirmationScreenState
                       ),
                       elevation: 0,
                     ),
-                    // 4. Swap the text out for a spinner
+                    // Disable the button with a spinner
                     child: _isRequestingRide
                         ? const SizedBox(
                             height: 24,

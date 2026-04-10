@@ -4,7 +4,8 @@ import '../controllers/auth_controller.dart';
 import '../controllers/user_controller.dart';
 
 class EditDateOfBirthScreen extends ConsumerStatefulWidget {
-  const EditDateOfBirthScreen({super.key});
+  final bool isDriver;
+  const EditDateOfBirthScreen({super.key, required this.isDriver});
 
   @override
   ConsumerState<EditDateOfBirthScreen> createState() =>
@@ -63,6 +64,21 @@ class _EditDateOfBirthScreenState extends ConsumerState<EditDateOfBirthScreen> {
 
   Future<void> _saveDateOfBirth() async {
     if (_selectedDate == null) return;
+
+    if (widget.isDriver) {
+      final now = DateTime.now();
+      // Calculate exactly 18 years ago from today
+      final legalAgeLimit = DateTime(now.year - 18, now.month, now.day);
+
+      // If their birthday is AFTER that limit, they are too young!
+      if (_selectedDate!.isAfter(legalAgeLimit)) {
+        // _showError('Drivers must be at least 18 years old.');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Drivers must be at least 18 years old.'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+    }
 
     setState(() => _isLoading = true);
 

@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:odogo_app/controllers/auth_controller.dart';
+import 'package:odogo_app/models/enums.dart';
 import 'phone_number_edit_screen.dart';
 import 'gender_selection_screen.dart';
 import 'email_edit_screen.dart';
@@ -26,11 +29,14 @@ class _BoundedBouncingScrollPhysics extends BouncingScrollPhysics {
   }
 }
 
-class PersonalDetailsScreen extends StatelessWidget {
+class PersonalDetailsScreen extends ConsumerWidget {
   const PersonalDetailsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(currentUserProvider);
+    final isDriver = user?.role == UserRole.driver;
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -107,7 +113,7 @@ class PersonalDetailsScreen extends StatelessWidget {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const EditDateOfBirthScreen(),
+                        builder: (context) => EditDateOfBirthScreen(isDriver: isDriver),
                       ),
                     );
                   },

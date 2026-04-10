@@ -30,16 +30,28 @@ class _EditNameScreenState extends ConsumerState<EditNameScreen> {
     super.dispose();
   }
 
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
+  }
+
   Future<void> _saveName() async {
     final newName = _nameController.text.trim();
 
     if (newName.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Name cannot be empty.'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _showError('Please enter your full name.');
+      return;
+    }
+
+    final nameRegex = RegExp(r"^[a-zA-Z\s]+$");
+    if (!nameRegex.hasMatch(newName)) {
+      _showError('Name can only contain letters and spaces.');
+      return;
+    }
+
+    if (newName.length < 2) {
+      _showError('Name is too short.');
       return;
     }
 
