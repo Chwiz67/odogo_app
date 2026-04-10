@@ -61,10 +61,10 @@ flutter_launcher_icons:
 
 # --- SPLASH SCREEN GENERATOR ---
 flutter_native_splash:
-  color: "#000000"
+  color: "#FFFFFF"
   image: "assets/images/odogo_logo.png"
   android: true
   ios: false
   android_12:
-    image: "assets/images/odogo_logo.png"
-    color: "#000000"
+    image: "assets/images/odogo_app_starting_logo.png"
+    color: "#FFFFFF"
