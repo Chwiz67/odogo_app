@@ -31,7 +31,8 @@ class DriverActivePickupScreen extends ConsumerStatefulWidget {
 }
 
 class _DriverActivePickupScreenState
-    extends ConsumerState<DriverActivePickupScreen> {
+    extends ConsumerState<DriverActivePickupScreen>
+    with WidgetsBindingObserver {
   final Color odogoGreen = const Color(0xFF66D2A3);
   final Color etaOrange = const Color(0xFFEC5B13);
   static const LatLng _fallbackDriverLocation = LatLng(26.5100, 80.2300);
@@ -47,6 +48,7 @@ class _DriverActivePickupScreenState
   LatLng? _lastRouteOrigin;
   bool _isRouteLoading = false;
   bool _pickupResolvedFromTrip = false;
+  bool _isLocationUnavailable = false;
 
   StreamSubscription<Position>? _driverLocationSubscription;
   final GlobalKey _bottomCardKey = GlobalKey();
@@ -65,18 +67,70 @@ class _DriverActivePickupScreenState
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initializeTripMap();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshLocationAvailability();
+    }
   }
 
   Future<void> _initializeTripMap() async {
     await _setInitialDriverLocation();
     await _startDriverLocationStream();
-    await _loadRoadRoute();
+    if (!_isLocationUnavailable) {
+      await _loadRoadRoute();
+    }
+  }
+
+  Future<void> _refreshLocationAvailability() async {
+    final hasPermission = await _ensureLocationPermission(
+      requestIfDenied: false,
+    );
+    if (!mounted) return;
+
+    if (!hasPermission) {
+      await _handleLocationUnavailable();
+      return;
+    }
+
+    if (_isLocationUnavailable) {
+      setState(() {
+        _isLocationUnavailable = false;
+      });
+    }
+
+    if (_driverLocationSubscription == null) {
+      await _startDriverLocationStream();
+    }
+  }
+
+  Future<void> _handleLocationUnavailable() async {
+    await _driverLocationSubscription?.cancel();
+    _driverLocationSubscription = null;
+
+    if (mounted) {
+      setState(() {
+        _isLocationUnavailable = true;
+        _routePoints = null;
+      });
+    }
+
+    final driverID = ref.read(currentUserProvider)?.userID;
+    if (driverID != null && driverID.isNotEmpty) {
+      await ref.read(telemetryControllerProvider).stopBroadcasting(driverID);
+    }
   }
 
   Future<void> _setInitialDriverLocation() async {
     final hasPermission = await _ensureLocationPermission();
-    if (!mounted || !hasPermission) return;
+    if (!mounted || !hasPermission) {
+      await _handleLocationUnavailable();
+      return;
+    }
 
     try {
       final position = await Geolocator.getCurrentPosition(
@@ -86,10 +140,13 @@ class _DriverActivePickupScreenState
       if (!mounted) return;
       setState(() {
         _driverLocation = LatLng(position.latitude, position.longitude);
+        _isLocationUnavailable = false;
       });
 
       _broadcastDriverTelemetry(_driverLocation);
-    } catch (_) {}
+    } catch (_) {
+      await _handleLocationUnavailable();
+    }
   }
 
   Future<void> _broadcastDriverTelemetry(LatLng location) async {
@@ -150,9 +207,9 @@ class _DriverActivePickupScreenState
     _loadRoadRoute();
   }
 
-  Future<bool> _ensureLocationPermission() async {
+  Future<bool> _ensureLocationPermission({bool requestIfDenied = true}) async {
     var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
+    if (requestIfDenied && permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
     }
     if (permission == LocationPermission.denied ||
@@ -164,7 +221,10 @@ class _DriverActivePickupScreenState
 
   Future<void> _startDriverLocationStream() async {
     final hasPermission = await _ensureLocationPermission();
-    if (!mounted || !hasPermission) return;
+    if (!mounted || !hasPermission) {
+      await _handleLocationUnavailable();
+      return;
+    }
 
     const locationSettings = LocationSettings(
       accuracy: LocationAccuracy.high,
@@ -176,7 +236,9 @@ class _DriverActivePickupScreenState
           (position) => _applyDriverLocationUpdate(
             LatLng(position.latitude, position.longitude),
           ),
-          onError: (_) {},
+          onError: (_) {
+            _handleLocationUnavailable();
+          },
         );
   }
 
@@ -185,6 +247,7 @@ class _DriverActivePickupScreenState
 
     setState(() {
       _driverLocation = location;
+      _isLocationUnavailable = false;
     });
     _broadcastDriverTelemetry(location);
 
@@ -252,6 +315,9 @@ class _DriverActivePickupScreenState
   }
 
   List<LatLng> get _polylinePoints {
+    if (_isLocationUnavailable) {
+      return const <LatLng>[];
+    }
     if (_routePoints != null && _routePoints!.length >= 2) {
       return [_driverLocation, ..._routePoints!];
     }
@@ -325,6 +391,7 @@ class _DriverActivePickupScreenState
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _driverLocationSubscription?.cancel();
     final driverID = ref.read(currentUserProvider)?.userID;
     if (driverID != null && driverID.isNotEmpty) {
@@ -488,6 +555,11 @@ class _DriverActivePickupScreenState
                         -0.0722,
                         0,
                         255,
+                        -0.2126,
+                        -0.7152,
+                        -0.0722,
+                        0,
+                        255,
                         0,
                         0,
                         0,
@@ -509,27 +581,28 @@ class _DriverActivePickupScreenState
                 ),
                 MarkerLayer(
                   markers: [
-                    Marker(
-                      point: _driverLocation,
-                      width: 56,
-                      height: 56,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: odogoGreen,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(4.0),
-                          child: ClipOval(
-                            child: Image.asset(
-                              'assets/images/odogo_logo_black_bg.jpeg',
-                              fit: BoxFit.contain,
+                    if (!_isLocationUnavailable)
+                      Marker(
+                        point: _driverLocation,
+                        width: 56,
+                        height: 56,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: odogoGreen,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(4.0),
+                            child: ClipOval(
+                              child: Image.asset(
+                                'assets/images/odogo_logo_black_bg.jpeg',
+                                fit: BoxFit.contain,
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
                     Marker(
                       point: _pickupLocation,
                       width: 40,
@@ -545,6 +618,35 @@ class _DriverActivePickupScreenState
               ],
             ),
           ),
+
+          if (_isLocationUnavailable)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 10,
+              left: 16,
+              right: 16,
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade700,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.location_off, color: Colors.white),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Location unavailable. Ask commuter to wait while you re-enable location.',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
 
           Positioned(
             bottom: 0,

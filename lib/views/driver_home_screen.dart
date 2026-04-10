@@ -11,6 +11,8 @@ import 'package:odogo_app/models/enums.dart';
 import 'package:odogo_app/models/trip_model.dart';
 import 'dart:async';
 import '../services/notification_permission_service.dart';
+import '../services/driver_location_access_service.dart';
+import 'location_permission_screen.dart';
 import 'driver_profile_screen.dart';
 import 'driver_bookings_screen.dart';
 import 'driver_active_pickup_screen.dart';
@@ -21,9 +23,12 @@ class DriverHomeScreen extends ConsumerStatefulWidget {
   ConsumerState<DriverHomeScreen> createState() => _DriverHomeScreenState();
 }
 
-class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
+class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen>
+    with WidgetsBindingObserver {
   final Color odogoGreen = const Color(0xFF66D2A3);
   final MapController _mapController = MapController();
+  final DriverLocationAccessService _locationAccessService =
+      const DriverLocationAccessService();
   static const LatLng _defaultCenter = LatLng(26.5123, 80.2329);
   static const double _recenterThresholdMeters = 25;
   static const double _bottomOverlayInset = 20;
@@ -32,6 +37,8 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
   StreamSubscription<Position>? _locationSubscription;
   final GlobalKey _bottomOverlayKey = GlobalKey();
   double _bottomOverlayHeight = 0;
+  bool _isLocationBlocked = false;
+  bool _isShowingLocationBlocker = false;
 
   double get _verticalCenterOffsetPx {
     return (_bottomOverlayHeight + _bottomOverlayInset) / 2;
@@ -59,7 +66,8 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
   @override
   void initState() {
     super.initState();
-    _startLocationStream();
+    WidgetsBinding.instance.addObserver(this);
+    _enforceDriverLocationRequirement(requestPermission: true);
 
     // Force sync the local user state when the home screen boots up so it catches the 'online' status set by the commuter.
     Future.microtask(
@@ -67,19 +75,17 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     );
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _enforceDriverLocationRequirement();
+    }
+  }
+
   Future<void> _startLocationStream() async {
-    // Request permission first — before checking service, so the dialog appears.
-    var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-    if (!mounted) return;
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
-      return;
-    }
-    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled || !mounted) return;
+    await _locationSubscription?.cancel();
+    _locationSubscription = null;
+
     const locationSettings = LocationSettings(
       accuracy: LocationAccuracy.high,
       distanceFilter: 3,
@@ -88,10 +94,82 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     _locationSubscription =
         Geolocator.getPositionStream(locationSettings: locationSettings).listen(
           (position) {
+            if (_isLocationBlocked) {
+              return;
+            }
             _applyLocationUpdate(LatLng(position.latitude, position.longitude));
           },
-          onError: (_) {},
+          onError: (_) {
+            _enforceDriverLocationRequirement();
+          },
         );
+  }
+
+  Future<void> _setDriverOfflineForBlockedLocation() async {
+    final currentUser = ref.read(currentUserProvider);
+    if (currentUser == null || currentUser.mode != DriverMode.online) {
+      return;
+    }
+
+    await ref
+        .read(userControllerProvider.notifier)
+        .updateDriverMode(DriverMode.offline);
+  }
+
+  Future<void> _enforceDriverLocationRequirement({
+    bool requestPermission = false,
+  }) async {
+    final status = await _locationAccessService.checkAccess(
+      requestIfDenied: requestPermission,
+    );
+    if (!mounted) return;
+
+    if (status.isBlocked) {
+      await _locationSubscription?.cancel();
+      _locationSubscription = null;
+
+      if (!_isLocationBlocked) {
+        setState(() {
+          _isLocationBlocked = true;
+        });
+      }
+
+      await _setDriverOfflineForBlockedLocation();
+      if (mounted) {
+        _showLocationBlocker(status);
+      }
+      return;
+    }
+
+    if (_isLocationBlocked && mounted) {
+      setState(() {
+        _isLocationBlocked = false;
+      });
+    }
+
+    await _startLocationStream();
+  }
+
+  Future<void> _showLocationBlocker(DriverLocationAccessStatus status) async {
+    if (_isShowingLocationBlocker || !mounted) return;
+    _isShowingLocationBlocker = true;
+
+    await Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            const LocationPermissionScreen(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+      ),
+    );
+
+    if (mounted) {
+      await _enforceDriverLocationRequirement();
+    }
+
+    _isShowingLocationBlocker = false;
   }
 
   void _applyLocationUpdate(LatLng location) {
@@ -137,6 +215,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _mapController.dispose();
     _locationSubscription?.cancel();
     super.dispose();
@@ -173,6 +252,21 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     final isCurrentlyOnline = currentUser.mode == DriverMode.online;
 
     final newMode = isCurrentlyOnline ? DriverMode.offline : DriverMode.online;
+
+    if (newMode == DriverMode.online) {
+      final status = await _locationAccessService.checkAccess(
+        requestIfDenied: true,
+      );
+      if (status.isBlocked) {
+        if (mounted) {
+          setState(() {
+            _isLocationBlocked = true;
+          });
+        }
+        _showLocationBlocker(status);
+        return;
+      }
+    }
 
     // 3. Tell the backend to update the database
 
@@ -322,7 +416,8 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     // WATCH THE BACKEND FOR REAL-TIME STATUS
 
     final currentUser = ref.watch(currentUserProvider);
-    final _isOnline = currentUser?.mode == DriverMode.online;
+    final _isOnline =
+        (currentUser?.mode == DriverMode.online) && !_isLocationBlocked;
 
     // Watch the stream of pending trips
 
@@ -513,7 +608,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
               ),
 
               GestureDetector(
-                onTap: _toggleOnlineState,
+                onTap: _isLocationBlocked ? null : _toggleOnlineState,
 
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
@@ -535,7 +630,9 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
                     children: [
                       Switch(
                         value: _isOnline,
-                        onChanged: (v) => _toggleOnlineState(),
+                        onChanged: _isLocationBlocked
+                            ? null
+                            : (v) => _toggleOnlineState(),
                         activeThumbColor: odogoGreen,
 
                         inactiveThumbColor: Colors.black,
@@ -572,6 +669,35 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
             ],
           ),
         ),
+
+        if (_isLocationBlocked)
+          Positioned(
+            left: 16,
+            right: 16,
+            top: MediaQuery.of(context).padding.top + 12,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.red.shade700,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.location_off, color: Colors.white),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Location unavailable. Enable location access to drive.',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
 
         Positioned(
           bottom: 20,
@@ -721,8 +847,9 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
                                     ),
                                     const SizedBox(width: 12),
                                     ElevatedButton(
-                                      onPressed: () =>
-                                          _acceptIncomingTrip(incomingTrip),
+                                      onPressed: () => _isLocationBlocked
+                                          ? null
+                                          : _acceptIncomingTrip(incomingTrip),
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: odogoGreen,
                                         foregroundColor: Colors.black,

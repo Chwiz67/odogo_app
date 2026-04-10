@@ -2,8 +2,10 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:odogo_app/controllers/auth_controller.dart';
 import 'package:odogo_app/models/enums.dart';
+import 'location_permission_screen.dart';
 
 class OtpPage extends ConsumerStatefulWidget {
   final bool isDriver;
@@ -69,6 +71,28 @@ class _OtpPageState extends ConsumerState<OtpPage> {
     if (needsDocs) {
       context.go('/driver-docs');
       return;
+    }
+
+    if (actualIsDriver) {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      final permission = await Geolocator.checkPermission();
+      final hasLocationAccess = serviceEnabled &&
+          (permission == LocationPermission.whileInUse ||
+              permission == LocationPermission.always);
+
+      if (!hasLocationAccess) {
+        await Navigator.push(
+          context,
+          PageRouteBuilder(
+            pageBuilder: (context, animation, secondaryAnimation) =>
+                const LocationPermissionScreen(),
+            transitionsBuilder:
+                (context, animation, secondaryAnimation, child) {
+              return FadeTransition(opacity: animation, child: child);
+            },
+          ),
+        );
+      }
     }
 
     context.go(actualIsDriver ? '/driver-home' : '/commuter-home');

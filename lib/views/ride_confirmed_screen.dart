@@ -37,18 +37,21 @@ class RideConfirmedScreen extends ConsumerStatefulWidget {
 
 class _RideConfirmedScreenState extends ConsumerState<RideConfirmedScreen> {
   static const LatLng _fallbackCurrentLocation = LatLng(26.5123, 80.2329);
-  static const LatLng _fallbackDriverLocation = LatLng(26.5150, 80.2300);
   static const LatLng _fallbackDropoffLocation = LatLng(26.5170, 80.2310);
   static const double _avgDriverSpeedMetersPerSecond = 4.5;
   static const double _minFitDistanceMeters = 5;
   static const double _destinationRefreshThresholdMeters = 5;
   static const double _driverUpdateThresholdMeters = 3;
+  static const Duration _driverTelemetryStaleAfter = Duration(seconds: 15);
 
   LatLng _pickupLocation = _fallbackCurrentLocation;
-  LatLng _driverLocation = _fallbackDriverLocation;
+  LatLng? _driverLastKnownLocation;
   List<LatLng>? _routePoints;
   bool _pickupResolvedFromTrip = false;
   late LatLng _dropoffLocation;
+  bool _isDriverLocationUnavailable = true;
+  int? _lastDriverTelemetryTimestampMs;
+  Timer? _driverTelemetryWatchdog;
 
   // MapController for active camera tracking
   final MapController _mapController = MapController();
@@ -60,11 +63,35 @@ class _RideConfirmedScreenState extends ConsumerState<RideConfirmedScreen> {
     _dropoffLocation = widget.dropoffPoint ?? _fallbackDropoffLocation;
     _pickupLocation = widget.pickupPoint ?? _fallbackCurrentLocation;
     _loadCurrentLocationAndRoute();
+    _startTelemetryWatchdog();
+  }
+
+  void _startTelemetryWatchdog() {
+    _driverTelemetryWatchdog = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!mounted) return;
+
+      final ts = _lastDriverTelemetryTimestampMs;
+      final isStale =
+          ts == null ||
+          DateTime.now().millisecondsSinceEpoch - ts >
+              _driverTelemetryStaleAfter.inMilliseconds;
+
+      if (_isDriverLocationUnavailable != isStale) {
+        setState(() {
+          _isDriverLocationUnavailable = isStale;
+          if (isStale) {
+            _routePoints = null;
+          }
+        });
+      }
+    });
   }
 
   Future<void> _loadCurrentLocationAndRoute() async {
     await _setCurrentLocationFromDevice();
-    await _loadRoadRoute();
+    if (_driverLastKnownLocation != null) {
+      await _loadRoadRoute();
+    }
   }
 
   Future<void> _setCurrentLocationFromDevice() async {
@@ -96,9 +123,18 @@ class _RideConfirmedScreenState extends ConsumerState<RideConfirmedScreen> {
   }
 
   Future<void> _loadRoadRoute() async {
+    final driverLocation = _driverLastKnownLocation;
+    if (driverLocation == null) {
+      if (!mounted) return;
+      setState(() {
+        _routePoints = null;
+      });
+      return;
+    }
+
     final uri = Uri.parse(
       'https://router.project-osrm.org/route/v1/driving/'
-      '${_driverLocation.longitude},${_driverLocation.latitude};'
+      '${driverLocation.longitude},${driverLocation.latitude};'
       '${_pickupLocation.longitude},${_pickupLocation.latitude}'
       '?overview=full&geometries=geojson',
     );
@@ -139,9 +175,14 @@ class _RideConfirmedScreenState extends ConsumerState<RideConfirmedScreen> {
       );
     }
 
+    final driverLocation = _driverLastKnownLocation;
+    if (driverLocation == null) {
+      return null;
+    }
+
     if (Geolocator.distanceBetween(
-          _driverLocation.latitude,
-          _driverLocation.longitude,
+          driverLocation.latitude,
+          driverLocation.longitude,
           _pickupLocation.latitude,
           _pickupLocation.longitude,
         ) <
@@ -150,23 +191,32 @@ class _RideConfirmedScreenState extends ConsumerState<RideConfirmedScreen> {
     }
 
     return CameraFit.bounds(
-      bounds: LatLngBounds.fromPoints([_driverLocation, _pickupLocation]),
+      bounds: LatLngBounds.fromPoints([driverLocation, _pickupLocation]),
       padding: const EdgeInsets.all(32),
     );
   }
 
   List<LatLng> _polylinePoints() {
+    final driverLocation = _driverLastKnownLocation;
+    if (driverLocation == null) {
+      return const <LatLng>[];
+    }
+
     if (_routePoints != null && _routePoints!.length >= 2) {
       // Blue line is now glued to the moving car
-      return [_driverLocation, ..._routePoints!];
+      return [driverLocation, ..._routePoints!];
     }
-    return [_driverLocation, _pickupLocation];
+    return [driverLocation, _pickupLocation];
   }
 
   int get _etaMinutesToPickup {
+    final driverLocation = _driverLastKnownLocation;
+    if (_isDriverLocationUnavailable || driverLocation == null) {
+      return 0;
+    }
     final distanceMeters = Geolocator.distanceBetween(
-      _driverLocation.latitude,
-      _driverLocation.longitude,
+      driverLocation.latitude,
+      driverLocation.longitude,
       _pickupLocation.latitude,
       _pickupLocation.longitude,
     );
@@ -276,25 +326,37 @@ class _RideConfirmedScreenState extends ConsumerState<RideConfirmedScreen> {
     ref.listen(driverLocationProvider(driverID), (previous, next) {
       final telemetry = next.value;
       if (telemetry != null) {
+        _lastDriverTelemetryTimestampMs = telemetry.timestampMs;
         final nextLocation = LatLng(telemetry.latitude, telemetry.longitude);
-        final moved = Geolocator.distanceBetween(
-          _driverLocation.latitude,
-          _driverLocation.longitude,
-          nextLocation.latitude,
-          nextLocation.longitude,
-        );
+        final previousLocation = _driverLastKnownLocation;
+        final moved = previousLocation == null
+            ? double.infinity
+            : Geolocator.distanceBetween(
+                previousLocation.latitude,
+                previousLocation.longitude,
+                nextLocation.latitude,
+                nextLocation.longitude,
+              );
+
+        setState(() {
+          if (moved >= _driverUpdateThresholdMeters) {
+            _driverLastKnownLocation = nextLocation;
+          }
+          _isDriverLocationUnavailable = false;
+        });
 
         if (moved >= _driverUpdateThresholdMeters) {
-          setState(() {
-            _driverLocation = nextLocation;
-          });
-
           if (_isMapReady) {
             _mapController.move(nextLocation, _mapController.camera.zoom);
           }
 
           _loadRoadRoute();
         }
+      } else {
+        setState(() {
+          _isDriverLocationUnavailable = true;
+          _routePoints = null;
+        });
       }
     });
 
@@ -355,11 +417,12 @@ class _RideConfirmedScreenState extends ConsumerState<RideConfirmedScreen> {
                 ),
                 PolylineLayer(
                   polylines: [
-                    Polyline(
-                      points: routePoints,
-                      strokeWidth: 5,
-                      color: Colors.blue,
-                    ),
+                    if (routePoints.length >= 2)
+                      Polyline(
+                        points: routePoints,
+                        strokeWidth: 5,
+                        color: Colors.blue,
+                      ),
                   ],
                 ),
                 MarkerLayer(
@@ -372,26 +435,58 @@ class _RideConfirmedScreenState extends ConsumerState<RideConfirmedScreen> {
                         size: 40,
                       ),
                     ),
-                    Marker(
-                      point: _driverLocation,
-                      width: 150,
-                      height: 150,
-                      child: Image.asset(
-                        'assets/images/odogo_logo_without_bg.png',
-                        fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const Icon(
-                              Icons.electric_rickshaw,
-                              color: Color(0xFF66D2A3),
-                              size: 40,
-                            ),
+                    if (_driverLastKnownLocation != null)
+                      Marker(
+                        point: _driverLastKnownLocation!,
+                        width: 150,
+                        height: 150,
+                        child: Image.asset(
+                          'assets/images/odogo_logo_without_bg.png',
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Icon(
+                                Icons.electric_rickshaw,
+                                color: Color(0xFF66D2A3),
+                                size: 40,
+                              ),
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ],
             ),
           ),
+
+          if (_isDriverLocationUnavailable)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 12,
+              left: 16,
+              right: 16,
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade800,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.warning_amber_rounded, color: Colors.white),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _driverLastKnownLocation == null
+                            ? 'Unable to find driver location right now.'
+                            : 'Unable to find live driver location. Showing last known location.',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
 
           Positioned(
             bottom: 0,
@@ -461,22 +556,28 @@ class _RideConfirmedScreenState extends ConsumerState<RideConfirmedScreen> {
                           vertical: 8,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.black,
+                          color: _isDriverLocationUnavailable
+                              ? Colors.grey.shade700
+                              : Colors.black,
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Column(
                           children: [
                             Text(
-                              '$_etaMinutesToPickup',
+                              _isDriverLocationUnavailable
+                                  ? '--'
+                                  : '$_etaMinutesToPickup',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            const Text(
-                              'MINS',
-                              style: TextStyle(
+                            Text(
+                              _isDriverLocationUnavailable
+                                  ? 'UNAVAILABLE'
+                                  : 'MINS',
+                              style: const TextStyle(
                                 color: Color(0xFF66D2A3),
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
@@ -624,5 +725,12 @@ class _RideConfirmedScreenState extends ConsumerState<RideConfirmedScreen> {
         ],
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _driverTelemetryWatchdog?.cancel();
+    _driverTelemetryWatchdog = null;
+    super.dispose();
   }
 }

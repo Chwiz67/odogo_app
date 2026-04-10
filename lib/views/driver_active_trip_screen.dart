@@ -15,7 +15,6 @@ import 'package:odogo_app/models/enums.dart';
 import 'package:odogo_app/models/trip_model.dart';
 import 'package:odogo_app/services/contact_launcher_service.dart';
 import 'package:odogo_app/services/notification_permission_service.dart';
-import 'package:odogo_app/views/driver_home_screen.dart';
 
 class DriverActiveTripScreen extends ConsumerStatefulWidget {
   final LatLng pickupLocation;
@@ -32,8 +31,8 @@ class DriverActiveTripScreen extends ConsumerStatefulWidget {
       _DriverActiveTripScreenState();
 }
 
-class _DriverActiveTripScreenState
-    extends ConsumerState<DriverActiveTripScreen> {
+class _DriverActiveTripScreenState extends ConsumerState<DriverActiveTripScreen>
+    with WidgetsBindingObserver {
   static const LatLng _fallbackDropoffLocation = LatLng(26.5170, 80.2310);
   static const double _avgDriverSpeedMetersPerSecond = 4.5; // ~16.2 km/h
   static const double _minFitDistanceMeters = 5;
@@ -47,6 +46,7 @@ class _DriverActiveTripScreenState
   LatLng? _lastRouteOrigin;
   bool _isRouteLoading = false;
   bool _dropoffResolvedFromTrip = false;
+  bool _isLocationUnavailable = false;
 
   StreamSubscription<Position>? _driverLocationSubscription;
   final GlobalKey _bottomCardKey = GlobalKey();
@@ -58,14 +58,63 @@ class _DriverActiveTripScreenState
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _driverLocation = widget.pickupLocation;
     _initializeTripMap();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshLocationAvailability();
+    }
   }
 
   Future<void> _initializeTripMap() async {
     await _setInitialDriverLocation();
     await _startDriverLocationStream();
-    await _loadRoadRoute();
+    if (!_isLocationUnavailable) {
+      await _loadRoadRoute();
+    }
+  }
+
+  Future<void> _refreshLocationAvailability() async {
+    final hasPermission = await _ensureLocationPermission(
+      requestIfDenied: false,
+    );
+    if (!mounted) return;
+
+    if (!hasPermission) {
+      await _handleLocationUnavailable();
+      return;
+    }
+
+    if (_isLocationUnavailable) {
+      setState(() {
+        _isLocationUnavailable = false;
+      });
+    }
+
+    if (_driverLocationSubscription == null) {
+      await _startDriverLocationStream();
+    }
+  }
+
+  Future<void> _handleLocationUnavailable() async {
+    await _driverLocationSubscription?.cancel();
+    _driverLocationSubscription = null;
+
+    if (mounted) {
+      setState(() {
+        _isLocationUnavailable = true;
+        _routePoints = null;
+      });
+    }
+
+    final driverID = ref.read(currentUserProvider)?.userID;
+    if (driverID != null && driverID.isNotEmpty) {
+      await ref.read(telemetryControllerProvider).stopBroadcasting(driverID);
+    }
   }
 
   void _syncDropoffFromTrip(TripModel? trip) {
@@ -102,7 +151,10 @@ class _DriverActiveTripScreenState
 
   Future<void> _setInitialDriverLocation() async {
     final hasPermission = await _ensureLocationPermission();
-    if (!mounted || !hasPermission) return;
+    if (!mounted || !hasPermission) {
+      await _handleLocationUnavailable();
+      return;
+    }
 
     try {
       final position = await Geolocator.getCurrentPosition(
@@ -112,11 +164,12 @@ class _DriverActiveTripScreenState
       if (!mounted) return;
       setState(() {
         _driverLocation = LatLng(position.latitude, position.longitude);
+        _isLocationUnavailable = false;
       });
 
       _broadcastDriverTelemetry(_driverLocation);
     } catch (_) {
-      // Keep fallback/start point if location fetch fails.
+      await _handleLocationUnavailable();
     }
   }
 
@@ -140,9 +193,9 @@ class _DriverActiveTripScreenState
     }
   }
 
-  Future<bool> _ensureLocationPermission() async {
+  Future<bool> _ensureLocationPermission({bool requestIfDenied = true}) async {
     var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
+    if (requestIfDenied && permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
     }
     if (permission == LocationPermission.denied ||
@@ -154,7 +207,10 @@ class _DriverActiveTripScreenState
 
   Future<void> _startDriverLocationStream() async {
     final hasPermission = await _ensureLocationPermission();
-    if (!mounted || !hasPermission) return;
+    if (!mounted || !hasPermission) {
+      await _handleLocationUnavailable();
+      return;
+    }
 
     const locationSettings = LocationSettings(
       accuracy: LocationAccuracy.high,
@@ -166,7 +222,9 @@ class _DriverActiveTripScreenState
           (position) => _applyDriverLocationUpdate(
             LatLng(position.latitude, position.longitude),
           ),
-          onError: (_) {},
+          onError: (_) {
+            _handleLocationUnavailable();
+          },
         );
   }
 
@@ -175,6 +233,7 @@ class _DriverActiveTripScreenState
 
     setState(() {
       _driverLocation = location;
+      _isLocationUnavailable = false;
     });
 
     _broadcastDriverTelemetry(location);
@@ -245,6 +304,9 @@ class _DriverActiveTripScreenState
   }
 
   List<LatLng> get _polylinePoints {
+    if (_isLocationUnavailable) {
+      return const <LatLng>[];
+    }
     if (_routePoints != null && _routePoints!.length >= 2) {
       // Dynamically glue the blue route line to the moving car
       return [_driverLocation, ..._routePoints!];
@@ -335,6 +397,7 @@ class _DriverActiveTripScreenState
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _driverLocationSubscription?.cancel();
     final driverID = ref.read(currentUserProvider)?.userID;
     if (driverID != null && driverID.isNotEmpty) {
@@ -442,27 +505,28 @@ class _DriverActiveTripScreenState
                 ),
                 MarkerLayer(
                   markers: [
-                    Marker(
-                      point: _driverLocation,
-                      width: 56,
-                      height: 56,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: odogoGreen,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 2),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(4.0),
-                          child: ClipOval(
-                            child: Image.asset(
-                              'assets/images/odogo_logo_black_bg.jpeg',
-                              fit: BoxFit.contain,
+                    if (!_isLocationUnavailable)
+                      Marker(
+                        point: _driverLocation,
+                        width: 56,
+                        height: 56,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: odogoGreen,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(4.0),
+                            child: ClipOval(
+                              child: Image.asset(
+                                'assets/images/odogo_logo_black_bg.jpeg',
+                                fit: BoxFit.contain,
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
                     Marker(
                       point: _dropoffLocation,
                       width: 40,
@@ -478,6 +542,34 @@ class _DriverActiveTripScreenState
               ],
             ),
           ),
+          if (_isLocationUnavailable)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 10,
+              left: 16,
+              right: 16,
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade700,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.location_off, color: Colors.white),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Location unavailable. Live tracking is paused until location is restored.',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           Positioned(
             bottom: 24,
             left: 20,
