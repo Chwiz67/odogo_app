@@ -128,6 +128,8 @@ class AuthController extends Notifier<AuthState> {
         if (userModel != null) {
           _enforceSingleDeviceSession(userModel, isNewLogin: false);
           state = AuthAuthenticated(userModel);
+        } else {
+          state = AuthNeedsProfileSetup(savedEmail);
         }
       } else {
         state = AuthInitial();

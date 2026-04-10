@@ -16,7 +16,6 @@ import 'package:odogo_app/models/driver_telemetry_model.dart';
 import 'package:odogo_app/models/enums.dart';
 import 'package:odogo_app/models/trip_model.dart';
 import 'package:odogo_app/services/contact_launcher_service.dart';
-import 'package:odogo_app/views/driver_home_screen.dart';
 import 'driver_active_trip_screen.dart';
 import 'driver_cancel_confirmation_screen.dart';
 import '../services/notification_permission_service.dart';
@@ -876,7 +875,8 @@ class _DriverActivePickupScreenState
       child: Center(
         child: Focus(
           onKeyEvent: (node, event) {
-            if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.backspace) {
+            if (event is KeyDownEvent &&
+                event.logicalKey == LogicalKeyboardKey.backspace) {
               if (_controllers[index].text.isEmpty && index > 0) {
                 _controllers[index - 1].clear();
                 FocusScope.of(context).requestFocus(_focusNodes[index - 1]);
@@ -903,7 +903,9 @@ class _DriverActivePickupScreenState
               if (value.length > 1) {
                 final newestDigit = value.substring(value.length - 1);
                 _controllers[index].text = newestDigit;
-                _controllers[index].selection = const TextSelection.collapsed(offset: 1);
+                _controllers[index].selection = const TextSelection.collapsed(
+                  offset: 1,
+                );
                 value = newestDigit;
               }
               if (value.isNotEmpty) {

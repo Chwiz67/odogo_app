@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:odogo_app/models/enums.dart';
+import 'package:odogo_app/models/trip_model.dart';
 import 'package:odogo_app/views/ride_confirmed_screen.dart';
 import '../controllers/auth_controller.dart';
 import '../data/iitk_dropoff_locations.dart';
@@ -15,6 +16,9 @@ import 'schedule_booking_screen.dart';
 import 'location_permission_screen.dart';
 import '../services/notification_permission_service.dart';
 import '../controllers/trip_controller.dart';
+import 'waiting_for_driver_screen.dart';
+import 'pickup_confirmed_screen.dart';
+import 'trip_end_request_screen.dart';
 
 class CommuterHomeScreen extends ConsumerStatefulWidget {
   const CommuterHomeScreen({super.key});
@@ -131,23 +135,70 @@ class _CommuterHomeScreenState extends ConsumerState<CommuterHomeScreen> {
 
       if (previous?.value == null && nextTrips.isNotEmpty) {
         for (var trip in nextTrips) {
-          // If Firebase says they are currently in the middle of a ride...
-          if (trip.status == TripStatus.confirmed ||
-              trip.status == TripStatus.ongoing) {
-            // Wait 1 frame for the Home Screen to finish drawing, then teleport them!
+          // If the ride is already ongoing (Driver entered PIN)
+          if (trip.status == TripStatus.ongoing) {
+            Future.microtask(() {
+              if (mounted) {
+                // Check if the driver has already ended the trip
+                if (trip.driverEnd == true) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => TripEndRequestScreen(tripID: trip.tripID),
+                    ),
+                  );
+                } else {
+                  LatLng? resolvedDropoff;
+                  try {
+                    final dLoc = iitkDropoffLocations.firstWhere(
+                      (loc) =>
+                          loc.name.toLowerCase() ==
+                          trip.endLocName.toLowerCase(),
+                    );
+                    resolvedDropoff = LatLng(dLoc.latitude, dLoc.longitude);
+                  } catch (_) {}
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => PickupConfirmedScreen(
+                        tripID: trip.tripID,
+                        dropoffPoint: resolvedDropoff,
+                      ),
+                    ),
+                  );
+                }
+              }
+            });
+            return;
+          }
+          // If the driver is on the way (Confirmed)
+          else if (trip.status == TripStatus.confirmed) {
             Future.microtask(() {
               if (mounted) {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    // NOTE: Pass pickupPoint/dropoffPoint if you have them, otherwise null is fine!
-                    builder: (context) =>
-                        RideConfirmedScreen(tripID: trip.tripID),
+                    builder: (_) => RideConfirmedScreen(tripID: trip.tripID),
                   ),
                 );
               }
             });
-            return; // Stop checking once we find the active ride
+            return;
+          }
+          // If they are still searching for a driver (Pending)
+          else if (trip.status == TripStatus.pending &&
+              trip.scheduledTime == null) {
+            Future.microtask(() {
+              if (mounted) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => WaitingForDriverScreen(tripID: trip.tripID),
+                  ),
+                );
+              }
+            });
+            return;
           }
         }
       }
@@ -996,6 +1047,18 @@ class _MapHomeViewState extends ConsumerState<_MapHomeView>
   Widget build(BuildContext context) {
     _measureBottomOverlayHeight();
 
+    // Scan for an active or searching trip
+    final trips = ref.watch(commuterTripsProvider).value ?? [];
+    TripModel? activeTrip;
+    for (var t in trips) {
+      if ((t.status == TripStatus.pending && t.scheduledTime == null) ||
+          t.status == TripStatus.confirmed ||
+          t.status == TripStatus.ongoing) {
+        activeTrip = t;
+        break;
+      }
+    }
+
     return Stack(
       children: [
         FlutterMap(
@@ -1110,6 +1173,121 @@ class _MapHomeViewState extends ConsumerState<_MapHomeView>
           ),
         ),
 
+        //  Uber-Style Ride Banner
+        if (activeTrip != null)
+          Positioned(
+            top: 100,
+            left: 20,
+            right: 20,
+            child: GestureDetector(
+              onTap: () {
+                // Dynamically route based on exact status
+                if (activeTrip!.status == TripStatus.ongoing) {
+                  if (activeTrip.driverEnd == true) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            TripEndRequestScreen(tripID: activeTrip!.tripID),
+                      ),
+                    );
+                  } else {
+                    LatLng? resolvedDropoff;
+                    try {
+                      final dLoc = iitkDropoffLocations.firstWhere(
+                        (loc) =>
+                            loc.name.toLowerCase() ==
+                            activeTrip!.endLocName.toLowerCase(),
+                      );
+                      resolvedDropoff = LatLng(dLoc.latitude, dLoc.longitude);
+                    } catch (_) {}
+
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => PickupConfirmedScreen(
+                          tripID: activeTrip!.tripID,
+                          dropoffPoint: resolvedDropoff,
+                        ),
+                      ),
+                    );
+                  }
+                } else if (activeTrip.status == TripStatus.confirmed) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          RideConfirmedScreen(tripID: activeTrip!.tripID),
+                    ),
+                  );
+                } else if (activeTrip.status == TripStatus.pending) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          WaitingForDriverScreen(tripID: activeTrip!.tripID),
+                    ),
+                  );
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(
+                    color: const Color(0xFF66D2A3),
+                    width: 1.5,
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 6,
+                      offset: Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Image.asset('assets/images/odogo_logo.png', height: 22),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Ongoing Ride',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: Colors.black,
+                            ),
+                          ),
+                          Text(
+                            activeTrip.status == TripStatus.pending
+                                ? 'Searching for driver...'
+                                : 'Tap to view details',
+                            style: TextStyle(
+                              color: Colors.grey[700],
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(
+                      Icons.arrow_forward_ios,
+                      color: Colors.black54,
+                      size: 14,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         Align(
           alignment: Alignment.bottomCenter,
           child: Container(

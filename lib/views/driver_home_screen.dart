@@ -11,6 +11,7 @@ import 'package:odogo_app/models/enums.dart';
 import 'package:odogo_app/models/trip_model.dart';
 import 'package:odogo_app/services/driver_location_access_service.dart';
 import 'package:odogo_app/services/notification_permission_service.dart';
+import 'package:odogo_app/views/driver_active_trip_screen.dart';
 import 'dart:async';
 import 'location_permission_screen.dart';
 import 'driver_profile_screen.dart';
@@ -323,15 +324,31 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen>
 
       if (previous?.value == null && newTrips.isNotEmpty) {
         for (var trip in newTrips) {
-          // If Firebase says the driver is currently executing a ride...
-          if (trip.status == TripStatus.confirmed ||
-              trip.status == TripStatus.ongoing) {
+          if (trip.status == TripStatus.ongoing) {
             Future.microtask(() {
               if (mounted) {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) =>
+                    builder: (_) => DriverActiveTripScreen(
+                      tripID: trip.tripID,
+                      pickupLocation: LatLng(
+                        trip.startLatitude ?? 26.5123,
+                        trip.startLongitude ?? 80.2329,
+                      ),
+                    ),
+                  ),
+                );
+              }
+            });
+            return;
+          } else if (trip.status == TripStatus.confirmed) {
+            Future.microtask(() {
+              if (mounted) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
                         DriverActivePickupScreen(tripID: trip.tripID),
                   ),
                 );
@@ -424,6 +441,16 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen>
 
     final pendingTripsAsync = ref.watch(pendingTripsProvider);
 
+    // Scan for the driver's active trip
+    final driverTrips = ref.watch(driverTripsProvider).value ?? [];
+    TripModel? activeTrip;
+    for (var t in driverTrips) {
+      if (t.status == TripStatus.confirmed || t.status == TripStatus.ongoing) {
+        activeTrip = t;
+        break;
+      }
+    }
+
     // Extract the list (default to empty if loading/error)
     final List<TripModel> availableTrips =
         List<TripModel>.from(pendingTripsAsync.value ?? const <TripModel>[])
@@ -444,7 +471,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen>
         index: _selectedIndex,
 
         children: [
-          _buildMapHome(_isOnline, availableTrips),
+          _buildMapHome(_isOnline, availableTrips, activeTrip),
           const DriverBookingsScreen(),
           const DriverProfileScreen(),
         ],
@@ -479,7 +506,11 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen>
 
   // THE MAP DASHBOARD
 
-  Widget _buildMapHome(bool _isOnline, List<TripModel> incomingTrips) {
+  Widget _buildMapHome(
+    bool _isOnline,
+    List<TripModel> incomingTrips,
+    TripModel? activeTrip,
+  ) {
     final hasIncomingTrips = incomingTrips.isNotEmpty;
 
     return Stack(
@@ -663,6 +694,95 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen>
           ),
         ),
 
+        // Uber-style Banner
+        if (activeTrip != null)
+          Positioned(
+            top: 120,
+            left: 20,
+            right: 20,
+            child: GestureDetector(
+              onTap: () {
+                // Dynamically route them to Pickup phase or Trip phase
+                if (activeTrip.status == TripStatus.ongoing) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => DriverActiveTripScreen(
+                        tripID: activeTrip.tripID,
+                        pickupLocation: LatLng(
+                          activeTrip.startLatitude ?? 26.5123,
+                          activeTrip.startLongitude ?? 80.2329,
+                        ),
+                      ),
+                    ),
+                  );
+                } else {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          DriverActivePickupScreen(tripID: activeTrip.tripID),
+                    ),
+                  );
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(
+                    color: const Color(0xFF66D2A3),
+                    width: 1.5,
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 6,
+                      offset: Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Image.asset('assets/images/odogo_logo.png', height: 22),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Ongoing Trip',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: Colors.black,
+                            ),
+                          ),
+                          Text(
+                            'Tap to return to navigation',
+                            style: TextStyle(
+                              color: Colors.grey[700],
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(
+                      Icons.arrow_forward_ios,
+                      color: Colors.black54,
+                      size: 14,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
         if (_isLocationBlocked)
           Positioned(
             left: 16,
@@ -804,7 +924,8 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen>
                               const Divider(height: 20),
                           itemBuilder: (context, index) {
                             final incomingTrip = incomingTrips[index];
-                            final isAcceptingThis = _acceptingTripId == incomingTrip.tripID;
+                            final isAcceptingThis =
+                                _acceptingTripId == incomingTrip.tripID;
                             final isAcceptingAny = _acceptingTripId != null;
                             return Column(
                               children: [
@@ -815,8 +936,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen>
                                     'Scheduled for ${DateFormat("d MMM, h:mm a").format(incomingTrip.scheduledTime!)}',
                                     style: const TextStyle(
                                       color: Colors.red,
-                                      fontWeight: FontWeight
-                                          .w900,
+                                      fontWeight: FontWeight.w900,
                                       fontSize: 16,
                                     ),
                                   ),
@@ -842,9 +962,12 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen>
                                     ),
                                     const SizedBox(width: 12),
                                     ElevatedButton(
-                                      onPressed: (_isLocationBlocked || isAcceptingAny)
+                                      onPressed:
+                                          (_isLocationBlocked || isAcceptingAny)
                                           ? null
-                                          : () =>_acceptIncomingTrip(incomingTrip),
+                                          : () => _acceptIncomingTrip(
+                                              incomingTrip,
+                                            ),
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: odogoGreen,
                                         foregroundColor: Colors.black,
@@ -855,20 +978,20 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen>
                                         shape: const StadiumBorder(),
                                       ),
                                       child: isAcceptingThis
-                                        ? const SizedBox(
-                                          width: 16,
-                                          height: 16,
-                                          child: CircularProgressIndicator(
-                                            color: Colors.black,
-                                            strokeWidth: 2,
-                                          ),
-                                        )
-                                        : const Text(
-                                          'Accept',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
+                                          ? const SizedBox(
+                                              width: 16,
+                                              height: 16,
+                                              child: CircularProgressIndicator(
+                                                color: Colors.black,
+                                                strokeWidth: 2,
+                                              ),
+                                            )
+                                          : const Text(
+                                              'Accept',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
                                     ),
                                   ],
                                 ),
