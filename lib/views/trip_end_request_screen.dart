@@ -139,29 +139,17 @@ class _TripEndRequestScreenState extends ConsumerState<TripEndRequestScreen> {
                 horizontal: 24.0,
                 vertical: 16.0,
               ),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF66D2A3),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.electric_rickshaw,
-                      color: Colors.black,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'OdoGo',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 22,
-                      letterSpacing: 0.5,
-                      shadows: [Shadow(color: Colors.black, blurRadius: 10)],
+                  Image.asset(
+                    'assets/images/odogo_logo_black_bg.jpeg',
+                    height: 40,
+                    errorBuilder: (context, error, stackTrace) => const Icon(
+                      Icons.broken_image,
+                      color: Color(0xFF66D2A3),
+                      size: 40,
                     ),
                   ),
                 ],
