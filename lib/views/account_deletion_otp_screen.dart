@@ -210,34 +210,55 @@ class _AccountDeletionOtpScreenState
         border: Border.all(color: Colors.red.withOpacity(0.5), width: 2),
       ),
       child: Center(
-        child: TextField(
-          controller: _controllers[index],
-          focusNode: _focusNodes[index],
-          textAlign: TextAlign.center,
-          keyboardType: TextInputType.number,
-          style: const TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-          inputFormatters: [LengthLimitingTextInputFormatter(1)],
-          decoration: const InputDecoration(
-            border: InputBorder.none,
-            counterText: '',
-          ),
-          onChanged: (value) {
-            if (value.isNotEmpty) {
-              if (index < 3) {
-                FocusScope.of(context).requestFocus(_focusNodes[index + 1]);
-              } else {
-                FocusScope.of(context).unfocus();
+        child: Focus(
+          onKeyEvent: (node, event) {
+            if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.backspace) {
+              if (_controllers[index].text.isEmpty && index > 0) {
+                _controllers[index - 1].clear();
+                FocusScope.of(context).requestFocus(_focusNodes[index - 1]);
+                return KeyEventResult.handled;
               }
-            } else if (value.isEmpty && index > 0) {
-              FocusScope.of(context).requestFocus(_focusNodes[index - 1]);
             }
+            return KeyEventResult.ignored;
           },
+          child: TextField(
+            controller: _controllers[index],
+            focusNode: _focusNodes[index],
+            textAlign: TextAlign.center,
+            keyboardType: TextInputType.number,
+            style: const TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(2),
+            ],
+            decoration: const InputDecoration(
+              border: InputBorder.none,
+              counterText: '',
+            ),
+            onChanged: (value) {
+              if (value.length > 1) {
+                final newestDigit = value.substring(value.length - 1);
+                _controllers[index].text = newestDigit;
+                _controllers[index].selection = const TextSelection.collapsed(offset: 1);
+                value = newestDigit;
+              }
+              if (value.isNotEmpty) {
+                if (index < 3) {
+                  FocusScope.of(context).requestFocus(_focusNodes[index + 1]);
+                } else {
+                  FocusScope.of(context).unfocus();
+                }
+              } else if (value.isEmpty && index > 0) {
+                FocusScope.of(context).requestFocus(_focusNodes[index - 1]);
+              }
+            },
+          ),
         ),
-      ),
+      )
     );
   }
 }
