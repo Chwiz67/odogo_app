@@ -9,9 +9,9 @@ import 'package:odogo_app/controllers/trip_controller.dart';
 import 'package:odogo_app/controllers/user_controller.dart';
 import 'package:odogo_app/models/enums.dart';
 import 'package:odogo_app/models/trip_model.dart';
+import 'package:odogo_app/services/driver_location_access_service.dart';
+import 'package:odogo_app/services/notification_permission_service.dart';
 import 'dart:async';
-import '../services/notification_permission_service.dart';
-import '../services/driver_location_access_service.dart';
 import 'location_permission_screen.dart';
 import 'driver_profile_screen.dart';
 import 'driver_bookings_screen.dart';
@@ -39,6 +39,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen>
   double _bottomOverlayHeight = 0;
   bool _isLocationBlocked = false;
   bool _isShowingLocationBlocker = false;
+  String? _acceptingTripId;
 
   double get _verticalCenterOffsetPx {
     return (_bottomOverlayHeight + _bottomOverlayInset) / 2;
@@ -59,7 +60,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen>
     });
   }
 
-  // --- NAVIGATION STATE ---
+  // NAVIGATION STATE
 
   int _selectedIndex = 0;
 
@@ -241,13 +242,13 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen>
   }
 
   Future<void> _toggleOnlineState() async {
-    // 1. Get the current user to check their status
+    // Get the current user to check their status
 
     final currentUser = ref.read(currentUserProvider);
 
     if (currentUser == null) return;
 
-    // 2. Determine what the NEW mode should be
+    // Determine what the new mode should be
 
     final isCurrentlyOnline = currentUser.mode == DriverMode.online;
 
@@ -268,11 +269,11 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen>
       }
     }
 
-    // 3. Tell the backend to update the database
+    // Tell the backend to update the database
 
     await ref.read(userControllerProvider.notifier).updateDriverMode(newMode);
 
-    // 4. Show the SnackBar
+    // Show the SnackBar
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -297,7 +298,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen>
   Widget build(BuildContext context) {
     _measureBottomOverlayHeight();
 
-    // 1. Check time every 30 seconds. If t=0, update database to 'confirmed'
+    // Check time every 30 seconds. If t=0, update database to 'confirmed'
     ref.listen(timeTickerProvider, (previous, next) {
       final now = next.value ?? DateTime.now();
       final trips = ref.read(driverTripsProvider).value ?? [];
@@ -315,7 +316,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen>
         }
       }
     });
-    // 2. When database flips to confirmed, trigger Snackbars/Notifications and Route!
+    // When database flips to confirmed, trigger Snackbars/Notifications and Route!
     ref.listen(driverTripsProvider, (previous, next) {
       final oldTrips = previous?.value ?? [];
       final newTrips = next.value ?? [];
@@ -476,11 +477,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen>
     );
   }
 
-  // ==========================================
-
-  // VIEW 1: THE MAP DASHBOARD
-
-  // ==========================================
+  // THE MAP DASHBOARD
 
   Widget _buildMapHome(bool _isOnline, List<TripModel> incomingTrips) {
     final hasIncomingTrips = incomingTrips.isNotEmpty;
@@ -537,7 +534,6 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen>
                 Marker(
                   point: _currentLocation ?? _defaultCenter,
 
-                  // 1. ADJUST THESE: The total size of the circular map pin
                   width: 56,
                   height: 56,
 
@@ -549,15 +545,12 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen>
 
                       border: Border.all(color: Colors.white, width: 2),
                     ),
-
-                    // 2. ADJUST THIS: The spacing between the white border and the logo
                     child: Padding(
                       padding: const EdgeInsets.all(4.0),
                       child: ClipOval(
                         child: Image.asset(
                           'assets/images/odogo_logo_black_bg.jpeg',
 
-                          // 3. THIS KEEPS IT FROM CLIPPING
                           fit: BoxFit.contain,
                           errorBuilder: (context, error, stackTrace) =>
                               const Icon(
@@ -811,6 +804,8 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen>
                               const Divider(height: 20),
                           itemBuilder: (context, index) {
                             final incomingTrip = incomingTrips[index];
+                            final isAcceptingThis = _acceptingTripId == incomingTrip.tripID;
+                            final isAcceptingAny = _acceptingTripId != null;
                             return Column(
                               children: [
                                 if (incomingTrip.status ==
@@ -821,7 +816,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen>
                                     style: const TextStyle(
                                       color: Colors.red,
                                       fontWeight: FontWeight
-                                          .w900, // Extra bold so they don't miss it!
+                                          .w900,
                                       fontSize: 16,
                                     ),
                                   ),
@@ -847,9 +842,9 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen>
                                     ),
                                     const SizedBox(width: 12),
                                     ElevatedButton(
-                                      onPressed: () => _isLocationBlocked
+                                      onPressed: (_isLocationBlocked || isAcceptingAny)
                                           ? null
-                                          : _acceptIncomingTrip(incomingTrip),
+                                          : () =>_acceptIncomingTrip(incomingTrip),
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor: odogoGreen,
                                         foregroundColor: Colors.black,
@@ -859,12 +854,21 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen>
                                         ),
                                         shape: const StadiumBorder(),
                                       ),
-                                      child: const Text(
-                                        'Accept',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
+                                      child: isAcceptingThis
+                                        ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                            color: Colors.black,
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                        : const Text(
+                                          'Accept',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                          ),
                                         ),
-                                      ),
                                     ),
                                   ],
                                 ),
@@ -885,9 +889,16 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen>
   }
 
   Future<void> _acceptIncomingTrip(TripModel incomingTrip) async {
+    if (_acceptingTripId != null) return;
+
+    setState(() {
+      _acceptingTripId = incomingTrip.tripID;
+    });
+
     final currentUserName = ref.read(currentUserProvider)?.name;
     final currentUserId = ref.read(currentUserProvider)?.userID;
     if (currentUserName == null || currentUserId == null) {
+      setState(() => _acceptingTripId = null);
       return;
     }
 
@@ -904,6 +915,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen>
 
     if (controllerState is AsyncError) {
       if (!mounted) return;
+      setState(() => _acceptingTripId = null);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Could not accept ride: ${controllerState.error}'),
@@ -914,6 +926,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen>
     }
 
     if (!mounted) return;
+    setState(() => _acceptingTripId = null);
     if (incomingTrip.status == TripStatus.scheduled) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
