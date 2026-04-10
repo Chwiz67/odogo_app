@@ -32,6 +32,7 @@ class _PickupConfirmedScreenState extends ConsumerState<PickupConfirmedScreen> {
   static const LatLng _fallbackDropoffLocation = LatLng(26.5170, 80.2310);
   static const double _avgSpeedMetersPerSecond = 4.5; // ~16.2 km/h
   static const double _minFitDistanceMeters = 5;
+  static const double _minRouteLineDistanceMeters = 20;
   static const double _routeRefreshThresholdMeters = 15;
 
   LatLng _userLocation = _fallbackUserLocation;
@@ -271,6 +272,16 @@ class _PickupConfirmedScreenState extends ConsumerState<PickupConfirmedScreen> {
     return [_userLocation, _dropoffLocation];
   }
 
+  bool get _shouldDrawRouteLine {
+    final distanceMeters = Geolocator.distanceBetween(
+      _userLocation.latitude,
+      _userLocation.longitude,
+      _dropoffLocation.latitude,
+      _dropoffLocation.longitude,
+    );
+    return distanceMeters >= _minRouteLineDistanceMeters;
+  }
+
   void _cancelRide() {
     Navigator.pop(context);
   }
@@ -357,11 +368,12 @@ class _PickupConfirmedScreenState extends ConsumerState<PickupConfirmedScreen> {
                 // Route Line
                 PolylineLayer(
                   polylines: [
-                    Polyline(
-                      points: routePoints,
-                      color: odogoGreen,
-                      strokeWidth: 5.0,
-                    ),
+                    if (_shouldDrawRouteLine)
+                      Polyline(
+                        points: routePoints,
+                        color: odogoGreen,
+                        strokeWidth: 5.0,
+                      ),
                   ],
                 ),
                 // Markers

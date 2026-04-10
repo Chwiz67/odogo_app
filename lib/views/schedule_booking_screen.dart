@@ -20,6 +20,8 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
   bool _isLoading = false;
+  double? _pickupLatitude;
+  double? _pickupLongitude;
 
   final TextEditingController _pickupController = TextEditingController();
   final TextEditingController _dropoffController = TextEditingController();
@@ -327,16 +329,22 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
 
     setState(() {
       String locationName = '';
+      double? selectedLatitude;
+      double? selectedLongitude;
 
       if (selected is String) {
         locationName = selected;
       } else if (selected is DropoffLocation) {
         locationName = selected.name;
+        selectedLatitude = selected.latitude;
+        selectedLongitude = selected.longitude;
       }
 
       // Assign to the correct controller
       if (isPickup) {
         _pickupController.text = locationName;
+        _pickupLatitude = selectedLatitude;
+        _pickupLongitude = selectedLongitude;
       } else {
         _dropoffController.text = locationName;
       }
@@ -411,6 +419,8 @@ class _ScheduleBookingScreenState extends ConsumerState<ScheduleBookingScreen> {
       commuterID: user.userID,
       commuterName: user.name,
       startLocName: _pickupController.text.trim(),
+      startLatitude: _pickupLatitude,
+      startLongitude: _pickupLongitude,
       endLocName: _dropoffController.text.trim(),
       startTime: null,
       ridePIN: ridePin,

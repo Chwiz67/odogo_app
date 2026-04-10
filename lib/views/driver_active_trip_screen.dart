@@ -36,6 +36,7 @@ class _DriverActiveTripScreenState extends ConsumerState<DriverActiveTripScreen>
   static const LatLng _fallbackDropoffLocation = LatLng(26.5170, 80.2310);
   static const double _avgDriverSpeedMetersPerSecond = 4.5; // ~16.2 km/h
   static const double _minFitDistanceMeters = 5;
+  static const double _minRouteLineDistanceMeters = 20;
   static const double _routeRefreshThresholdMeters = 15;
   static const double _destinationRefreshThresholdMeters = 5;
   final Color odogoGreen = const Color(0xFF66D2A3);
@@ -314,6 +315,20 @@ class _DriverActiveTripScreenState extends ConsumerState<DriverActiveTripScreen>
     return [_driverLocation, _dropoffLocation];
   }
 
+  bool get _shouldDrawRouteLine {
+    if (_isLocationUnavailable) {
+      return false;
+    }
+
+    final distanceMeters = Geolocator.distanceBetween(
+      _driverLocation.latitude,
+      _driverLocation.longitude,
+      _dropoffLocation.latitude,
+      _dropoffLocation.longitude,
+    );
+    return distanceMeters >= _minRouteLineDistanceMeters;
+  }
+
   int get _etaMinutesToDropoff {
     final distanceMeters = Geolocator.distanceBetween(
       _driverLocation.latitude,
@@ -496,11 +511,12 @@ class _DriverActiveTripScreenState extends ConsumerState<DriverActiveTripScreen>
                 ),
                 PolylineLayer(
                   polylines: [
-                    Polyline(
-                      points: polylinePoints,
-                      color: odogoGreen,
-                      strokeWidth: 5.0,
-                    ),
+                    if (_shouldDrawRouteLine)
+                      Polyline(
+                        points: polylinePoints,
+                        color: odogoGreen,
+                        strokeWidth: 5.0,
+                      ),
                   ],
                 ),
                 MarkerLayer(

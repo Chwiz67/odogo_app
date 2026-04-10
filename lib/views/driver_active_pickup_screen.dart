@@ -39,6 +39,7 @@ class _DriverActivePickupScreenState
   static const LatLng _fallbackPickupLocation = LatLng(26.5140, 80.2340);
   static const double _avgDriverSpeedMetersPerSecond = 4.5;
   static const double _minFitDistanceMeters = 5;
+  static const double _minRouteLineDistanceMeters = 20;
   static const double _routeRefreshThresholdMeters = 15;
   static const double _destinationRefreshThresholdMeters = 5;
 
@@ -324,6 +325,20 @@ class _DriverActivePickupScreenState
     return [_driverLocation, _pickupLocation];
   }
 
+  bool get _shouldDrawRouteLine {
+    if (_isLocationUnavailable) {
+      return false;
+    }
+
+    final distanceMeters = Geolocator.distanceBetween(
+      _driverLocation.latitude,
+      _driverLocation.longitude,
+      _pickupLocation.latitude,
+      _pickupLocation.longitude,
+    );
+    return distanceMeters >= _minRouteLineDistanceMeters;
+  }
+
   EdgeInsets _cameraFitPadding() {
     return EdgeInsets.fromLTRB(28, 28, 28, 28 + _bottomCardHeight);
   }
@@ -555,11 +570,6 @@ class _DriverActivePickupScreenState
                         -0.0722,
                         0,
                         255,
-                        -0.2126,
-                        -0.7152,
-                        -0.0722,
-                        0,
-                        255,
                         0,
                         0,
                         0,
@@ -572,11 +582,12 @@ class _DriverActivePickupScreenState
                 ),
                 PolylineLayer(
                   polylines: [
-                    Polyline(
-                      points: polylinePoints,
-                      color: odogoGreen,
-                      strokeWidth: 5.0,
-                    ),
+                    if (_shouldDrawRouteLine)
+                      Polyline(
+                        points: polylinePoints,
+                        color: odogoGreen,
+                        strokeWidth: 5.0,
+                      ),
                   ],
                 ),
                 MarkerLayer(

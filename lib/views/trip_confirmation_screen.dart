@@ -38,6 +38,7 @@ class _TripConfirmationScreenState
     extends ConsumerState<TripConfirmationScreen> {
   List<LatLng>? _routePoints;
   static const double _minFitDistanceMeters = 5;
+  static const double _minRouteLineDistanceMeters = 20;
   bool _isRequestingRide = false;
 
   @override
@@ -141,6 +142,23 @@ class _TripConfirmationScreenState
     return null;
   }
 
+  bool get _shouldDrawRouteLine {
+    final pickup = widget.pickupPoint;
+    final dropoff = widget.dropoffPoint;
+    if (pickup == null || dropoff == null) {
+      return false;
+    }
+
+    final distanceMeters = Geolocator.distanceBetween(
+      pickup.latitude,
+      pickup.longitude,
+      dropoff.latitude,
+      dropoff.longitude,
+    );
+
+    return distanceMeters >= _minRouteLineDistanceMeters;
+  }
+
   @override
   Widget build(BuildContext context) {
     final routePoints = _polylinePoints();
@@ -202,7 +220,7 @@ class _TripConfirmationScreenState
                     );
                   },
                 ),
-                if (routePoints != null)
+                if (routePoints != null && _shouldDrawRouteLine)
                   PolylineLayer(
                     polylines: [
                       Polyline(

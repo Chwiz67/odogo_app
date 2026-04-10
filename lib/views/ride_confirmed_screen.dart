@@ -40,6 +40,7 @@ class _RideConfirmedScreenState extends ConsumerState<RideConfirmedScreen> {
   static const LatLng _fallbackDropoffLocation = LatLng(26.5170, 80.2310);
   static const double _avgDriverSpeedMetersPerSecond = 4.5;
   static const double _minFitDistanceMeters = 5;
+  static const double _minRouteLineDistanceMeters = 20;
   static const double _destinationRefreshThresholdMeters = 5;
   static const double _driverUpdateThresholdMeters = 3;
   static const Duration _driverTelemetryStaleAfter = Duration(seconds: 15);
@@ -207,6 +208,21 @@ class _RideConfirmedScreenState extends ConsumerState<RideConfirmedScreen> {
       return [driverLocation, ..._routePoints!];
     }
     return [driverLocation, _pickupLocation];
+  }
+
+  bool get _shouldDrawRouteLine {
+    final driverLocation = _driverLastKnownLocation;
+    if (driverLocation == null) {
+      return false;
+    }
+
+    final distanceMeters = Geolocator.distanceBetween(
+      driverLocation.latitude,
+      driverLocation.longitude,
+      _pickupLocation.latitude,
+      _pickupLocation.longitude,
+    );
+    return distanceMeters >= _minRouteLineDistanceMeters;
   }
 
   int get _etaMinutesToPickup {
@@ -417,7 +433,7 @@ class _RideConfirmedScreenState extends ConsumerState<RideConfirmedScreen> {
                 ),
                 PolylineLayer(
                   polylines: [
-                    if (routePoints.length >= 2)
+                    if (_shouldDrawRouteLine && routePoints.length >= 2)
                       Polyline(
                         points: routePoints,
                         strokeWidth: 5,

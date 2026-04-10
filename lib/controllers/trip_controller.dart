@@ -124,6 +124,7 @@ class TripController extends Notifier<AsyncValue<void>> {
   /// Driver: Accepts a pending ride
   Future<void> acceptRide(String tripID, String driverName, String driverID, {bool isScheduled = false}) async {
     state = const AsyncValue.loading();
+    var tripAssigned = false;
     try {
       // 1. Delegate the complex transaction to the repository
       await _repository.runAcceptRideTransaction(
@@ -132,17 +133,31 @@ class TripController extends Notifier<AsyncValue<void>> {
         driverName: driverName,
         isScheduled: isScheduled,
       );
+      tripAssigned = true;
 
-      // 2. Set driver mode to busy
-      await ref.read(userRepositoryProvider).updateUser(driverID, {
-        'mode': DriverMode.busy.name,
-      });
+      // 2. Best-effort updates; do not fail accept flow after trip is assigned.
+      try {
+        await ref.read(userRepositoryProvider).updateUser(driverID, {
+          'mode': DriverMode.busy.name,
+        });
+      } catch (e) {
+        print('DEBUG: acceptRide mode update warning: $e');
+      }
 
-      // 3. Refresh user state
-      await ref.read(authControllerProvider.notifier).refreshUser();
+      try {
+        await ref.read(authControllerProvider.notifier).refreshUser();
+      } catch (e) {
+        print('DEBUG: acceptRide refresh warning: $e');
+      }
       
       state = const AsyncValue.data(null);
     } catch (e, st) {
+      if (tripAssigned) {
+        // Transaction already succeeded; surface soft warning only.
+        print('DEBUG: acceptRide completed with warning: $e');
+        state = const AsyncValue.data(null);
+        return;
+      }
       print(
         'DEBUG: acceptRide error: $e'.replaceFirst('Exception: ', '').trim(),
       );
