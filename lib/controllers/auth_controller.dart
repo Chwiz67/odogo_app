@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:odogo_app/models/user_model.dart';
 import 'package:odogo_app/repositories/user_repository.dart';
 import 'package:odogo_app/services/email_link_auth_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 // Auth States
 abstract class AuthState {}
@@ -70,6 +72,47 @@ class AuthController extends Notifier<AuthState> {
   // We can access 'ref' directly inside a Notifier to read the repo!
   UserRepository get _userRepo => ref.read(userRepositoryProvider);
 
+  StreamSubscription<DocumentSnapshot>? _sessionSub;
+
+  Future<void> _enforceSingleDeviceSession(
+    UserModel user, {
+    bool isNewLogin = false,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // If this is a fresh login, generate a token and save it to the phone AND Firestore
+    if (isNewLogin) {
+      final newToken = 'session_${DateTime.now().millisecondsSinceEpoch}';
+      await prefs.setString('odogo_session_token', newToken);
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.userID)
+          .update({'sessionToken': newToken});
+    }
+
+    // Start a live listener on this user's Firestore document
+    _sessionSub?.cancel();
+    _sessionSub = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.userID)
+        .snapshots()
+        .listen((doc) async {
+          if (!doc.exists) {
+            _sessionSub?.cancel();
+            await logout(isForced: true);
+            return;
+          }
+
+          final remoteToken = doc.data()?['sessionToken'] as String?;
+          final localToken = prefs.getString('odogo_session_token');
+
+          if (localToken != null && remoteToken != localToken) {
+            _sessionSub?.cancel();
+            await logout(isForced: true);
+          }
+        });
+  }
+
   Future<void> _checkSavedSession() async {
     state = AuthLoading();
     try {
@@ -83,9 +126,8 @@ class AuthController extends Notifier<AuthState> {
       if (savedEmail != null) {
         final userModel = await _userRepo.getUserByEmail(savedEmail);
         if (userModel != null) {
+          _enforceSingleDeviceSession(userModel, isNewLogin: false);
           state = AuthAuthenticated(userModel);
-        } else {
-          state = AuthNeedsProfileSetup(savedEmail);
         }
       } else {
         state = AuthInitial();
@@ -140,6 +182,7 @@ class AuthController extends Notifier<AuthState> {
       final userModel = await _userRepo.getUserByEmail(cleanEmail);
 
       if (userModel != null) {
+        _enforceSingleDeviceSession(userModel, isNewLogin: true);
         state = AuthAuthenticated(userModel);
       } else {
         state = AuthNeedsProfileSetup(cleanEmail);
@@ -154,7 +197,7 @@ class AuthController extends Notifier<AuthState> {
     try {
       // Save the new user to Firestore
       await _userRepo.createUser(newUser);
-
+      _enforceSingleDeviceSession(newUser, isNewLogin: true);
       // Officially log them in so the Router takes them to the Map.
       state = AuthAuthenticated(newUser);
     } catch (e) {
@@ -169,7 +212,8 @@ class AuthController extends Notifier<AuthState> {
   */
 
   // When a user logs out, we remove them from the linked list
-  Future<void> logout() async {
+  Future<void> logout({bool isForced = false}) async {
+    _sessionSub?.cancel();
     final prefs = await SharedPreferences.getInstance();
 
     // Getting the active email before wiping it
@@ -179,6 +223,13 @@ class AuthController extends Notifier<AuthState> {
     );
 
     if (activeEmail != null) {
+      final user = await _userRepo.getUserByEmail(activeEmail);
+      if (user != null && !isForced) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.userID)
+            .update({'sessionToken': null});
+      }
       // Removing ghost accounts from the list
       linked.removeWhere(
         (e) => e.trim().toLowerCase() == activeEmail.trim().toLowerCase(),
@@ -202,6 +253,7 @@ class AuthController extends Notifier<AuthState> {
   }
 
   Future<void> deleteAccount(String email, String otp) async {
+    _sessionSub?.cancel();
     // Save the previous state so we can safely revert if the OTP is wrong
     final previousState = state;
     state = AuthLoading();
@@ -278,6 +330,7 @@ class AuthController extends Notifier<AuthState> {
 
       // Update the global app state.
       if (userModel != null) {
+        _enforceSingleDeviceSession(userModel, isNewLogin: true);
         state = AuthAuthenticated(userModel);
       } else {
         state = AuthNeedsProfileSetup(newEmail);
@@ -288,6 +341,7 @@ class AuthController extends Notifier<AuthState> {
   }
 
   Future<void> abortSignup() async {
+    _sessionSub?.cancel();
     final prefs = await SharedPreferences.getInstance();
 
     // Get the email of the incomplete account

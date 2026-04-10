@@ -10,7 +10,8 @@ class UserModel {
   final String gender;
   final Timestamp dob;
   final UserRole role;
-  final List<Timestamp>? cancelHistory; // stores the time stamps of the rides cancelled in last 15 mins
+  final List<Timestamp>?
+  cancelHistory; // stores the time stamps of the rides cancelled in last 15 mins
 
   // Commuter-specific fields
   final List<String>? savedLocations;
@@ -24,6 +25,8 @@ class UserModel {
   final DriverMode? mode;
   final double? avgRating;
   final int? ratingCount;
+
+  final String? sessionToken; //For knowing which session.
 
   UserModel({
     required this.userID,
@@ -43,6 +46,7 @@ class UserModel {
     this.mode,
     this.avgRating,
     this.ratingCount,
+    this.sessionToken,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -76,6 +80,7 @@ class UserModel {
           : null,
       avgRating: (json['avgRating'] as num?)?.toDouble(),
       ratingCount: json['ratingCount'],
+      sessionToken: json['sessionToken'],
     );
   }
 
@@ -98,6 +103,7 @@ class UserModel {
       if (mode != null) 'mode': mode!.name,
       if (avgRating != null) 'avgRating': avgRating,
       if (ratingCount != null) 'ratingCount': ratingCount,
+      if (sessionToken != null) 'sessionToken': sessionToken,
     };
   }
 }
