@@ -68,10 +68,22 @@ class _DriverBookingsScreenState extends ConsumerState<DriverBookingsScreen> {
 
                 displayList.sort((a, b) {
                   final timeA =
-                      a.scheduledTime ?? a.eta?.toDate() ?? DateTime.now();
+                      a.startTime ??
+                      a.scheduledTime ??
+                      DateTime.fromMillisecondsSinceEpoch(
+                        int.tryParse(a.tripID) ?? 0,
+                      );
                   final timeB =
-                      b.scheduledTime ?? b.eta?.toDate() ?? DateTime.now();
-                  return timeB.compareTo(timeA);
+                      b.startTime ??
+                      b.scheduledTime ??
+                      DateTime.fromMillisecondsSinceEpoch(
+                        int.tryParse(b.tripID) ?? 0,
+                      );
+                  if (_selectedTab == 0) {
+                    return timeB.compareTo(timeA);
+                  } else {
+                    return timeA.compareTo(timeB);
+                  }
                 });
 
                 if (displayList.isEmpty) {

@@ -76,9 +76,13 @@ class _BookingsScreenState extends ConsumerState<BookingsScreen> {
                       b.startTime ??
                       b.scheduledTime ??
                       DateTime.fromMillisecondsSinceEpoch(
-                        int.tryParse(a.tripID) ?? 0,
+                        int.tryParse(b.tripID) ?? 0,
                       );
-                  return timeB.compareTo(timeA); // Descending order
+                  if (_selectedTab == 0) {
+                    return timeB.compareTo(timeA);
+                  } else {
+                    return timeA.compareTo(timeB);
+                  }
                 });
 
                 if (displayList.isEmpty) {
