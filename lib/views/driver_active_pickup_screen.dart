@@ -512,13 +512,7 @@ class _DriverActivePickupScreenState
             );
             Future.delayed(const Duration(milliseconds: 500), () {
               if (mounted) {
-                Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const DriverHomeScreen(),
-                  ),
-                  (route) => false,
-                );
+                Navigator.popUntil(context, (route) => route.isFirst);
               }
             });
           }
